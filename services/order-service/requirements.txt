@@ -1,1 +1,4 @@
-#TODO
+#TODO: Completare
+flask
+sqlalchemy
+psycopg2-binary

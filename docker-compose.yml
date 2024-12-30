@@ -1,5 +1,20 @@
 version: '3.9'
 services:
+  # Logica di API Gateway
+  nginx:
+    image: nginx:latest
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx.conf:/etc/nginx/nginx.conf
+      - ./jwt_secret.key:/etc/nginx/keys/jwt_secret.key
+    depends_on:
+      - game-catalog
+      - order-service
+      - notification-service
+    restart: always
+
   zookeeper: #TODO: Da rivedere
     image: confluentinc/cp-zookeeper:7.3.0
     container_name: zookeeper
