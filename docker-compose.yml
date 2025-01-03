@@ -2,17 +2,24 @@ version: '3.9'
 services:
   # Logica di API Gateway
   nginx:
-    image: nginx:latest
+    #image: nginxinc/nginx-unprivileged:stable
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
     container_name: nginx
     ports:
       - "80:80"
     volumes:
-      - ./nginx.conf:/etc/nginx/nginx.conf
-      - ./jwt_secret.key:/etc/nginx/keys/jwt_secret.key
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd
     depends_on:
       - game-catalog
       - order-service
       - notification-service
+      - frontend
+    networks:
+      - frontend-network
+      - backend-network
     restart: always
 
   zookeeper: #TODO: Da rivedere
@@ -38,6 +45,20 @@ services:
     depends_on:
       - zookeeper
 
+  # Frontend client
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    ports:
+      - "3004:3000"
+    volumes:
+      - ./frontend:/usr/src/app
+    networks:
+      - frontend-network
+    restart: always
+
   # Services
   game-catalog: #TODO: Da rivedere
     build:
@@ -53,6 +74,8 @@ services:
       - kafka
     volumes:
       - ./services/game-catalog/src:/usr/src/app
+    networks:
+      - backend-network
 
   order-service: #TODO: Da rivedere
     build:
@@ -68,6 +91,8 @@ services:
       - kafka
     volumes:
       - ./services/order-service/src:/usr/src/app
+    networks:
+      - backend-network
 
   notification-service: #TODO: Da rivedere
     build:
@@ -82,7 +107,9 @@ services:
       - redis
       - kafka
     volumes:
-      - ./services/order-service/src:/usr/src/app
+      - ./services/notification-service/src:/usr/src/app
+    networks:
+      - backend-network
 
   # Databases
   mongo: #TODO: Da rivedere
@@ -91,8 +118,11 @@ services:
     ports:
       - "27017:27017"
     volumes:
-      - ./databases/mongo:/data/db
+      #- ./databases/mongo:/data/db
+      - mongo-data:/data/db
       - ./databases/mongo/configdb:/data/configdb
+    networks:
+      - backend-network
 
   postgres: #TODO: Da rivedere
     image: postgres:15
@@ -104,13 +134,18 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: orders
     volumes:
-      - ./databases/postgres:/var/lib/postgresql/data
+      #- ./databases/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+    networks:
+      - backend-network
 
   redis: #TODO: Da rivedere
     image: redis:7
     container_name: redis
     ports:
       - "6379:6379"
+    networks:
+      - backend-network
 
   # Monitoring
   prometheus: #TODO: Da rivedere
@@ -120,6 +155,8 @@ services:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - backend-network
 
   grafana: #TODO: Da rivedere
     image: grafana/grafana:latest
@@ -130,3 +167,16 @@ services:
       - prometheus
     volumes:
       - ./monitoring/grafana:/var/lib/grafana
+    networks:
+      - backend-network
+
+volumes:
+  mongo-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge
