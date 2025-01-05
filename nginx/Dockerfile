@@ -9,7 +9,7 @@ RUN apt-get update && \
 RUN mkdir -p /etc/nginx/keys
 
 # Crea il file .htpasswd con username e password
-RUN echo "user1:$(htpasswd -bnB user1 password123)" > /etc/nginx/keys/.htpasswd
+#RUN echo "user1:$(htpasswd -bnB user1 password123)" > /etc/nginx/keys/.htpasswd
 
 # Copia la configurazione nginx.conf nella configurazione di NGINX
 COPY nginx.conf /etc/nginx/nginx.conf

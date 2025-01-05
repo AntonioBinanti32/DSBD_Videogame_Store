@@ -1,0 +1,7 @@
+CREATE TABLE IF NOT EXISTS all_users (
+    id SERIAL PRIMARY KEY,
+    username VARCHAR(255) UNIQUE NOT NULL,
+    password VARCHAR(255) NOT NULL,
+    image_url TEXT NOT NULL,
+    created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+);

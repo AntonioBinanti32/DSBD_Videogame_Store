@@ -1,4 +1,5 @@
 #TODO: Completare
-flask==2.2.2
+flask
 redis
 sqlalchemy==2.0.21
+kafka-python

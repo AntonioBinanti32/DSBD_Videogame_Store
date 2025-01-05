@@ -3,6 +3,12 @@ import requests
 import configparser
 from datetime import datetime
 import json
+import logging
+import jwt
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 app = Flask(__name__)
 app.secret_key = 'your_secret_key'
@@ -46,9 +52,12 @@ def convertToJson(message_str):
 
 def getUserInformation():
     user = session.get('user')
-    response_user = requests.get(f'{backend_url}/getUser/{user}', headers=getHeaders())
-    message = convertToJson(response_user.json()['message'])
-    return message
+    response_user = requests.get(f'{backend_url}/order-service/getUser/{user}', headers=getHeaders())
+    if response_user.status_code == 200:
+        return response_user.json()['user']
+    else:
+        logger.error(f"Failed to retrieve user information. Status Code: {response_user.status_code}")
+        return None
 
 # Definisci il filtro personalizzato per la formattazione della data
 @app.template_filter('dateformat')
@@ -92,15 +101,17 @@ def home():
     try:
         if not is_user_logged_in():
             return redirect(url_for('login'))
-
         actualUser = getUserInformation()
-
-        response_games = requests.get(f'{backend_url}/getUserPreferredGames', headers=getHeaders())
-        if response_games.json()['error']:
+        response_games = requests.get(f'{backend_url}/game-catalog/getUserPreferredGames', headers=getHeaders())
+        if response_games.status_code == 204:
+            return render_template('home.html', games=[], genres=[], actualUser=[], admin=False,
+                                   unread_notifications=[])
+        elif response_games.status_code != 200:
             flash(response_games.json()['message'])
             return render_template('home.html', games=[], genres=[], actualUser=[], admin=False,
                                    unread_notifications=[])
-        games = convertToJson(response_games.json()['message'])
+        logger.info(f"\n\n\ngames: {response_games.json()}\n\n\n")
+        games = response_games.json()['message']
 
         # Recupera i parametri di ricerca e filtro dalla richiesta
         search_query = request.args.get('search', '')
@@ -131,16 +142,16 @@ def home():
         elif sort_order == 'developer':
             games = sorted(games, key=lambda x: x['developer'])
         elif sort_order == 'preferred':
-            response_preferred_games = requests.get(f'{backend_url}/getUserPreferredGames', headers=getHeaders())
-            preferred_games = convertToJson(response_preferred_games.json()['message'])
+            response_preferred_games = requests.get(f'{backend_url}/game-catalog/getUserPreferredGames', headers=getHeaders())
+            preferred_games = response_preferred_games.json()['message']
             games = preferred_games
 
         # Recupera i generi dei giochi
         genres = list(set(game['genre'] for game in games))
 
         username = session.get('user')
-        response_notifications = requests.get(f'{backend_url}/getUnreadNotifications/{username}')
-        unread_notifications = response_notifications.json()
+        #response_notifications = requests.get(f'{backend_url}/getUnreadNotifications/{username}') #TODO:configurare notifiche
+        unread_notifications = "" #response_notifications.json()
         if unread_notifications is None:
             return render_template('home.html', games=games, genres=genres, actualUser=actualUser, admin=is_admin(),
                                    unread_notifications=[])
@@ -267,8 +278,8 @@ def login():
     if request.method == 'POST':
         credentials = request.form
         try:
-            response = requests.post(f'{backend_url}/login', json=credentials)
-            if response.json()['error']:
+            response = requests.post(f'{backend_url}/order-service/login', json=credentials)
+            if response.status_code != 200:
                 flash(response.json()['message'])
                 return render_template('login.html')
             response.raise_for_status()  # Questo genera un'eccezione per codici di stato HTTP 4xx/5xx
@@ -294,8 +305,8 @@ def signup():
     if request.method == 'POST':
         user_data = request.form
         try:
-            response = requests.post(f'{backend_url}/signup', json=user_data)
-            if response.json()['error']:
+            response = requests.post(f'{backend_url}/order-service/signup', json=user_data)
+            if response.status_code != 200:
                 flash(response.json()['message'])
                 return render_template('signup.html')
             response.raise_for_status()

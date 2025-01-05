@@ -1,3 +1,4 @@
 flask
 requests==2.32.3
 configparser==5.0.2
+flask-jwt-extended

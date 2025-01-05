@@ -1,3 +1,6 @@
 #TODO: Completare
 flask
 pymongo
+flask-bcrypt
+flask-jwt-extended
+kafka-python
