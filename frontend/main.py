@@ -59,7 +59,7 @@ def getUserInformation():
         logger.error(f"Failed to retrieve user information. Status Code: {response_user.status_code}")
         return None
 
-# Definisci il filtro personalizzato per la formattazione della data
+"""
 @app.template_filter('dateformat')
 def dateformat(value):
     try:
@@ -69,6 +69,29 @@ def dateformat(value):
         elif isinstance(value, dict) and '$date' in value:
             # Se il valore è un oggetto data MongoDB
             dt_object = datetime.utcfromtimestamp(value['$date'] / 1000.0)
+        else:
+            raise ValueError("Formato data non riconosciuto")
+
+        # Formatta la data come desiderato (es. "%Y-%m-%d %H:%M:%S")
+        formatted_date = dt_object.strftime("%Y-%m-%d %H:%M:%S")
+        return formatted_date
+    except Exception as e:
+        print(f"Errore nella formattazione del timestamp: {e}")
+        return "Data non disponibile"
+"""
+
+@app.template_filter('dateformat')
+def dateformat(value):
+    try:
+        if isinstance(value, (int, float)):
+            # Se il valore è un timestamp Unix, convertilo in datetime
+            dt_object = datetime.utcfromtimestamp(value / 1000.0)
+        elif isinstance(value, dict) and '$date' in value:
+            # Se il valore è un oggetto data MongoDB
+            dt_object = datetime.utcfromtimestamp(value['$date'] / 1000.0)
+        elif isinstance(value, str):
+            # Se il valore è una stringa, prova a convertirla in datetime
+            dt_object = datetime.strptime(value, "%a, %d %b %Y %H:%M:%S %Z")
         else:
             raise ValueError("Formato data non riconosciuto")
 
@@ -110,7 +133,6 @@ def home():
             flash(response_games.json()['message'])
             return render_template('home.html', games=[], genres=[], actualUser=[], admin=False,
                                    unread_notifications=[])
-        logger.info(f"\n\n\ngames: {response_games.json()}\n\n\n")
         games = response_games.json()['message']
 
         # Recupera i parametri di ricerca e filtro dalla richiesta
@@ -171,11 +193,11 @@ def home():
 
 @app.route('/game/<string:gameTitle>')
 def game(gameTitle):
-    response = requests.get(f'{backend_url}/getGameByTitle/{gameTitle}', headers = getHeaders())
-    if response.json()['error']:
+    response = requests.get(f'{backend_url}/game-catalog/getGameByTitle/{gameTitle}', headers = getHeaders())
+    if response.status_code != 200:
         flash(response.json()['message'])
         return redirect(url_for('home'))
-    game = convertToJson(response.json()['message'])
+    game = response.json()['game']
     return render_template('game.html', game=game, admin=is_admin())
 
 @app.route('/create_game', methods=['GET', 'POST'])
@@ -194,8 +216,9 @@ def create_game():
         }
 
         try:
-            response = requests.post(f'{backend_url}/addGame', json=data, headers=getHeaders())
-            if response.json()['error']:
+            response = requests.post(f'{backend_url}/game-catalog/addGame', json=data, headers=getHeaders())
+            #if response.json()['error']:
+            if response.status_code != 200:
                 flash(response.json()['message'])
                 return redirect(url_for('home'))
             response.raise_for_status()
@@ -214,11 +237,11 @@ def update_game_form(gameTitle):
         return redirect(url_for('home'))
 
     # Recupera i dettagli del gioco per il form di aggiornamento
-    response = requests.get(f'{backend_url}/getGameByTitle/{gameTitle}', headers=getHeaders())
-    if response.json()['error']:
+    response = requests.get(f'{backend_url}/game-catalog/getGameByTitle/{gameTitle}', headers=getHeaders())
+    if response.status_code != 200:
         flash(response.json()['message'])
         return redirect(url_for('home'))
-    game = convertToJson(response.json()['message'])
+    game = response.json()['game']
 
     return render_template('update_game.html', game=game)
 
@@ -241,8 +264,8 @@ def update_game(gameTitle):
     }
 
     try:
-        response = requests.put(f'{backend_url}/updateGame', json=update_data, headers=getHeaders())
-        if response.json()['error']:
+        response = requests.put(f'{backend_url}/game-catalog/updateGame', json=update_data, headers=getHeaders())
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('home'))
         response.raise_for_status()
@@ -260,8 +283,8 @@ def delete_game(gameTitle):
         return redirect(url_for('home'))
 
     try:
-        response = requests.delete(f'{backend_url}/deleteGame/{gameTitle}', headers=getHeaders())
-        if response.json()['error']:
+        response = requests.delete(f'{backend_url}/game-catalog/deleteGame/{gameTitle}', headers=getHeaders())
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('home'))
         response.raise_for_status()
@@ -340,8 +363,8 @@ def reviews(gameTitle):
 
         headers = getHeaders()
         try:
-            response = requests.post(f'{backend_url}/addReview', json=review_data, headers=headers)
-            if response.json()['error']:
+            response = requests.post(f'{backend_url}/game-catalog/addReview', json=review_data, headers=headers)
+            if response.status_code != 200:
                 flash(response.json()['message'])
                 return redirect(url_for('game', gameTitle=gameTitle))
             response.raise_for_status()
@@ -353,11 +376,11 @@ def reviews(gameTitle):
 
     else:
         # Metodo GET per ottenere le recensioni già presenti
-        response = requests.get(f'{backend_url}/getReviewByGame/{gameTitle}')
-        if response.json()['error']:
+        response = requests.get(f'{backend_url}/game-catalog/getReviewByGame/{gameTitle}')
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('game', gameTitle=gameTitle))
-        reviews = convertToJson(response.json()['message'])
+        reviews = response.json()['reviews']
         return render_template('game.html', gameTitle=gameTitle, admin=is_admin())
     return render_template('game.html', gameTitle=gameTitle, admin=is_admin())
 
@@ -368,12 +391,12 @@ def cart():
             return redirect(url_for('login'))
 
         username = session.get('user')
-        response = requests.get(f'{backend_url}/getReservations/{username}', headers=getHeaders())
-        if response.json()['error']:
+        response = requests.get(f'{backend_url}/order-service/getReservations/{username}', headers=getHeaders())
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('home'))
         response.raise_for_status()
-        cart_items = convertToJson(response.json()['message'])
+        cart_items = response.json()['reservations']
         return render_template('cart.html', cart_items=cart_items, admin=is_admin())
     except requests.exceptions.HTTPError as http_err:
         flash('Failed to fetch cart: invalid credentials')
@@ -387,10 +410,6 @@ def cart():
 
 @app.route('/add_to_cart/<string:gameTitle>', methods=['GET', 'POST'])
 def add_to_cart(gameTitle):
-    """if 'cart' not in session:
-        session['cart'] = []
-    session['cart'].append(gameTitle)
-    return redirect(url_for('cart'))"""
     if not is_user_logged_in():
         return redirect(url_for('login'))
 
@@ -402,14 +421,14 @@ def add_to_cart(gameTitle):
         'numCopies': quantity
     }
     try:
-        response = requests.post(f'{backend_url}/addReservation', headers = getHeaders(), json=review_data)
-        if response.json()['error']:
+        response = requests.post(f'{backend_url}/order-service/addReservation', headers = getHeaders(), json=review_data)
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('game', gameTitle=gameTitle))
         response.raise_for_status()
         flash('Game added successfully to cart!', 'success')
     except requests.exceptions.RequestException as e:
-        flash(f"Failed to add game in cart.", 'danger')
+        flash(f"Failed to add game in cart: {str(e)}", 'danger')
 
     return redirect(url_for('game', gameTitle=gameTitle))
 
@@ -419,8 +438,14 @@ def remove_from_cart(reservation_id):
     try:
         if not is_user_logged_in():
             return redirect(url_for('login'))
-        response = requests.delete(f'{backend_url}/deleteReservation/{reservation_id}', headers=getHeaders())
-        if response.json()['error']:
+
+        if not reservation_id.isalnum():
+            flash('Invalid reservation ID', 'danger')
+            return redirect(url_for('cart'))
+
+
+        response = requests.delete(f'{backend_url}/order-service/deleteReservation/{reservation_id}', headers=getHeaders())
+        if response.status_code != 200:
             flash(response.json()['message'])
             return redirect(url_for('cart'))
         response.raise_for_status()
@@ -460,16 +485,16 @@ def checkout():
                     'gameTitle': item['game_title'],
                     'numCopies': item['num_copies']
                 }
-                response = requests.post(f'{backend_url}/addPurchase', json=purchase_data, headers=getHeaders())
-                if response.json()['error']:
+                response = requests.post(f'{backend_url}/order-service/addPurchase', json=purchase_data, headers=getHeaders())
+                if response.status_code != 200:
                     flash(response.json()['message'])
                     return redirect(url_for('cart'))
                 response.raise_for_status()
 
                 # After successfully adding the purchase, remove the item from the cart
-                reservation_id = item['_id']['$oid']
-                remove_response = requests.delete(f'{backend_url}/deleteReservation/{reservation_id}', headers=getHeaders())
-                if response.json()['error']:
+                reservation_id = item['_id']
+                remove_response = requests.delete(f'{backend_url}/order-service/deleteReservation/{reservation_id}', headers=getHeaders())
+                if response.status_code != 200:
                     flash(response.json()['message'])
                     return redirect(url_for('cart'))
                 remove_response.raise_for_status()
@@ -479,12 +504,12 @@ def checkout():
 
         else:  # GET request
             username = session.get('user')
-            response = requests.get(f'{backend_url}/getPurchases/{username}', headers=getHeaders())
-            if response.json()['error']:
+            response = requests.get(f'{backend_url}/order-service/getPurchases/{username}', headers=getHeaders())
+            if response.status_code != 200:
                 flash(response.json()['message'])
                 return redirect(url_for('cart'))
             response.raise_for_status()
-            purchases = convertToJson(response.json()['message'])
+            purchases = response.json()['purchases']
             return render_template('checkout.html', purchases=purchases, admin=is_admin())
 
     except requests.exceptions.RequestException as e:
@@ -499,12 +524,12 @@ def purchases():
             flash('Only admin users can view all purchases.', 'danger')
             return redirect(url_for('home'))
 
-        response = requests.get(f'{backend_url}/getAllPurchases', headers=getHeaders())
+        response = requests.get(f'{backend_url}/order-service/getAllPurchases', headers=getHeaders())
         if response.json()['error']:
             flash(response.json()['message'])
             return redirect(url_for('home'))
         response.raise_for_status()
-        purchases = convertToJson(response.json()['message'])
+        purchases = response.json()['purchases']
 
         total_revenue = sum(item['num_copies'] * item['price'] for item in purchases)
 

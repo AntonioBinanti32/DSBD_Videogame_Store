@@ -17,6 +17,11 @@ services:
       - order-service
       - notification-service
       - frontend
+    #healthcheck:
+    #  test: ["CMD", "/usr/src/app/healthcheck.sh"]
+    #  interval: 10s
+    #  timeout: 5s
+    #  retries: 3
     networks:
       - frontend-network
       - backend-network
@@ -45,6 +50,8 @@ services:
       KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_MAX_MESSAGE_SIZE: 209715200  # 200MB
+      KAFKA_MESSAGE_MAX_BYTES: 209715200  # 200MB
 
     depends_on:
       - zookeeper

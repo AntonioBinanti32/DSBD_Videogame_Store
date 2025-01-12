@@ -1,10 +1,16 @@
 from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import json
+import logging
+
+logger = logging.getLogger()
+logger.setLevel(logging.INFO)
+logging.basicConfig(level=logging.INFO)
 
 producer = KafkaProducer(
     bootstrap_servers=['kafka:9092'],
-    value_serializer=lambda v: json.dumps(v).encode('utf-8')
+    value_serializer=lambda v: json.dumps(v).encode('utf-8'),
+    max_request_size=209715200
 )
 
 class NotificationError(Exception):
@@ -12,30 +18,48 @@ class NotificationError(Exception):
     pass
 
 
-def notify_game_catalog(username):
+def notify_game_catalog_signup(username):
     try:
-        # Controllo che lo username sia una stringa valida
         if not username or not isinstance(username, str):
             raise ValueError("Lo username deve essere una stringa non vuota.")
 
-        # Creazione del messaggio
         message = {"username": username}
 
-        # Invio del messaggio al topic Kafka
         future = producer.send('user-registrations', value=message)
 
-        # Controllo se l'invio ha avuto successo
-        result = future.get(timeout=10)  # Timeout per prevenire attese infinite
+        result = future.get(timeout=10)
         print(f"Messaggio inviato con successo a Kafka: {result}")
 
     except KafkaError as ke:
-        # Gestione degli errori di Kafka
         raise NotificationError(f"Errore durante l'invio del messaggio a Kafka: {str(ke)}") from ke
 
     except ValueError as ve:
-        # Gestione degli errori relativi al messaggio
         raise NotificationError(f"Errore nella validazione del messaggio: {str(ve)}") from ve
 
     except Exception as e:
-        # Gestione di errori generici
+        raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+
+def notify_game_catalog_game(game_title, remaining_copies):
+    try:
+        if not game_title or not isinstance(game_title, str):
+            raise ValueError("game_title deve essere una stringa non vuota.")
+        if not remaining_copies or not isinstance(remaining_copies, int):
+            raise ValueError("remaining_copies deve essere una stringa non vuota.")
+
+        message = {
+            "game_title": game_title,
+            "remaining_copies": remaining_copies}
+
+        future = producer.send('game-modify', value=message)
+
+        result = future.get(timeout=10)
+        logger.info(f"Messaggio inviato con successo a Kafka: {result}")
+
+    except KafkaError as ke:
+        raise NotificationError(f"Errore durante l'invio del messaggio a Kafka: {str(ke)}") from ke
+
+    except ValueError as ve:
+        raise NotificationError(f"Errore nella validazione del messaggio: {str(ve)}") from ve
+
+    except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e

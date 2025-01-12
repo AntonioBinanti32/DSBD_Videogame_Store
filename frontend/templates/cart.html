@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="cart-container">
+    <h1>Your Cart</h1>
+    {% if cart_items %}
+        <ul class="cart-items-list">
+            {% set ns = namespace(total_price=0) %}
+            {% for item in cart_items %}
+                {% set item_price = item['price'] %}
+                {% set item_total = item['num_copies'] * item_price if item_price else 0 %}
+                {% set ns.total_price = ns.total_price + item_total %}
+                <li class="cart-item">
+                    <div class="cart-item-info">
+                        <strong>Game:</strong> <a href="{{ url_for('game', gameTitle=item['game_title']) }}">{{ item['game_title'] }}</a><br>
+                        <strong>Quantity:</strong> {{ item['num_copies'] }}<br>
+                        <strong>Price per copy:</strong> {% if item_price %}${{ item_price }}{% else %}Price not available{% endif %}<br>
+                        <strong>Total:</strong> {% if item_price %}${{ item_total }}{% else %}Price not available{% endif %}
+                    </div>
+                    <div class="cart-item-actions">
+                        <form action="{{ url_for('remove_from_cart', reservation_id=item['_id']) }}" method="post">
+                            <button type="submit" class="btn btn-danger">Remove</button>
+                        </form>
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+        <p class="total-price">Total Price: ${{ ns.total_price }}</p>
+        <form action="{{ url_for('checkout') }}" method="post" class="checkout-form">
+            <input type="hidden" name="cart_items" value='{{ cart_items | tojson }}'>
+            <button type="submit" class="btn btn-primary">Proceed to Checkout</button>
+        </form>
+    {% else %}
+        <p class="empty-cart">Your cart is empty.</p>
+    {% endif %}
+</div>
+{% endblock %}

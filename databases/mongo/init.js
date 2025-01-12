@@ -1,6 +1,12 @@
 db = db.getSiblingDB('game-catalog'); // Seleziona il database 'game-catalog'
 
 db.createCollection('games'); // Crea la collezione 'games' se non esiste
+db.createCollection('users'); // Crea la collezione 'users' se non esiste
+
+db.users.insertOne({
+  "username": "admin",
+  "reviews": []
+});
 
 db.games.insertMany([
   {
@@ -316,7 +322,7 @@ db.games.insertMany([
 },
 {
   "_id": ObjectId("667eb250c0c0a40f5325d2d4"),
-  "title": "Marvel's Spider-Man",
+  "title": "Marvel\'s Spider-Man",
   "genre": "Action-adventure",
   "release_date": new Date("2018-09-07T00:00:00.000Z"),
   "developer": "Insomniac Games",
@@ -381,7 +387,7 @@ db.games.insertMany([
   },
   {
     "_id": ObjectId("667eb250c0c0a40f5325d2d9"),
-    "title": "Demon's Souls",
+    "title": "Demon\'s Souls",
     "genre": "Action RPG",
     "release_date": new Date("2020-11-12T00:00:00.000Z"),
     "developer": "Bluepoint Games / Japan Studio",
