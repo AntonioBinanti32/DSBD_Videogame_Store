@@ -1,5 +1,4 @@
-#TODO: Completare
 flask
 redis
-sqlalchemy==2.0.21
 kafka-python
+flask-jwt-extended

@@ -18,11 +18,6 @@ config.read('config.ini')
 
 backend_url = config.get('backend', 'nginx_url')
 
-#TODO: Completare styles.css
-#TODO: Fare checkup generale per vedere se funziona tutto
-#TODO: Implementare users.html
-
-
 def is_user_logged_in():
     return 'user' in session
 
@@ -172,8 +167,11 @@ def home():
         genres = list(set(game['genre'] for game in games))
 
         username = session.get('user')
-        #response_notifications = requests.get(f'{backend_url}/getUnreadNotifications/{username}') #TODO:configurare notifiche
-        unread_notifications = "" #response_notifications.json()
+        response_notifications = requests.get(f'{backend_url}/notification-service/getUnreadNotifications/{username}', headers=getHeaders())
+        if response_notifications.status_code != 200:
+            raise flash(response_notifications.json()['message'])
+            return redirect(url_for('home'))
+        unread_notifications = response_notifications.json()['unread_notifications']
         if unread_notifications is None:
             return render_template('home.html', games=games, genres=genres, actualUser=actualUser, admin=is_admin(),
                                    unread_notifications=[])
@@ -217,7 +215,6 @@ def create_game():
 
         try:
             response = requests.post(f'{backend_url}/game-catalog/addGame', json=data, headers=getHeaders())
-            #if response.json()['error']:
             if response.status_code != 200:
                 flash(response.json()['message'])
                 return redirect(url_for('home'))
@@ -552,13 +549,12 @@ def notifications():
 
         username = session.get('user')
 
-        response_2 = requests.get(f'{backend_url}/getAllNotifications/{username}')
+        response_2 = requests.get(f'{backend_url}/notification-service/getAllNotifications/{username}', headers=getHeaders())
         response_2.raise_for_status()
-        notifications = response_2.json()
-
-        response_3 = requests.get(f'{backend_url}/getUnreadNotifications/{username}')
+        notifications = response_2.json()["notifications"]
+        response_3 = requests.get(f'{backend_url}/notification-service/getUnreadNotifications/{username}', headers=getHeaders())
         response_3.raise_for_status()
-        notifications_unread = response_3.json()
+        notifications_unread = response_3.json()["unread_notifications"]
 
         return render_template('notifications.html', notifications=notifications, notifications_unread=notifications_unread)
     except requests.exceptions.HTTPError as http_err:
@@ -584,12 +580,12 @@ def mark_as_read(notification_id):
             'NotificationID': notification_id,
             'Username': username
         }
-        response = requests.post(f'{backend_url}/markNotificationAsRead', json=data)
+        response = requests.post(f'{backend_url}/notification-service/markNotificationAsRead', json=data, headers=getHeaders())
         response.raise_for_status()
         return redirect(url_for('notifications', username=username))
 
     except requests.exceptions.HTTPError as http_err:
-        flash('Failed to mark notifications: invalid credentials')
+        flash(f'Failed to mark notifications: invalid credentials- {http_err}')
     except requests.exceptions.ConnectionError as conn_err:
         flash('Connection error: please try again later')
     except requests.exceptions.Timeout as timeout_err:

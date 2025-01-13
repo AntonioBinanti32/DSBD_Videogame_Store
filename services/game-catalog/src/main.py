@@ -114,10 +114,14 @@ def add_game_route():
 
         mongo_db = MongoDB.get_instance()
         game = mongo_db.add_game(title, genre, release_date, developer, price, stock, description, image_url)
-        logger.info(f"\n\n\ngame: {game}\n\n\n")
-        notify_order_service_add_game(title, stock, price)
+        if game:
+            notify_order_service_add_game(title, stock, price)
 
-        return jsonify({'game': game, 'error': False, 'message': 'Gamed added successfully'}), 200
+            users = mongo_db.get_all_users()
+            message = f"E' stato inserito nel catalogo un nuovo gioco: {title}. Vieni a scoprirlo!"
+            notify_notification_service(users, message)
+
+            return jsonify({'game': game, 'error': False, 'message': 'Gamed added successfully'}), 200
 
     except KeyError:
         return jsonify({'error': True, 'message': 'Invalid get user format'}), 400
@@ -206,6 +210,8 @@ def add_review_route():
         mongo_db = MongoDB.get_instance()
         review = mongo_db.add_review(username, game_title, review_text, rating)
         if review:
+            message = f"L'utente {username} ha lasciato una recensione al gioco '{game_title}'"
+            notify_notification_service_admin(message)
             return jsonify({'error': False, 'message': 'Review added successfully'}), 200
 
     except KeyError:
@@ -234,4 +240,4 @@ def get_review_by_game_route(title):
 if __name__ == "__main__":
     kafka_thread = threading.Thread(target=listen_order_service, daemon=True)
     kafka_thread.start()
-    app.run(host="0.0.0.0", port=3001)
+    app.run(host="0.0.0.0", port=3001, threaded=True)

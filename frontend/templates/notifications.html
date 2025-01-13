@@ -9,8 +9,8 @@
         <ul>
             {% for notification in notifications_unread %}
                 <li>
-                    <strong>{{ notification.Message }}</strong> - {{ notification.Timestamp }}
-                    <form action="{{ url_for('mark_as_read', notification_id=notification.ID) }}" method="POST">
+                    <strong>{{ notification.message }}</strong> - {{ notification.timestamp }}
+                    <form action="{{ url_for('mark_as_read', notification_id=notification.id) }}" method="POST">
                         <button type="submit">Mark as Read</button>
                     </form>
                 </li>
@@ -27,7 +27,7 @@
         <ul>
             {% for notification in notifications %}
                 <li>
-                    <strong>{{ notification.Message }}</strong> - {{ notification.Timestamp }}
+                    <strong>{{ notification.message }}</strong> - {{ notification.timestamp }}
                 </li>
             {% endfor %}
         </ul>

@@ -1,4 +1,3 @@
-#TODO: Completare
 flask
 pymongo
 flask-bcrypt

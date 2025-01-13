@@ -38,7 +38,7 @@ services:
     networks:
       - backend-network
 
-  kafka: #TODO: Da rivedere
+  kafka:
     image: confluentinc/cp-kafka:7.3.0
     container_name: kafka
     ports:
@@ -73,7 +73,7 @@ services:
     restart: always
 
   # Services
-  game-catalog: #TODO: Da rivedere
+  game-catalog:
     build:
       context: ./services/game-catalog
       dockerfile: Dockerfile
@@ -96,7 +96,7 @@ services:
     networks:
       - backend-network
 
-  order-service: #TODO: Da rivedere
+  order-service:
     build:
       context: ./services/order-service
       dockerfile: Dockerfile
@@ -118,7 +118,7 @@ services:
     networks:
       - backend-network
 
-  notification-service: #TODO: Da rivedere
+  notification-service:
     build:
       context: ./services/notification-service
       dockerfile: Dockerfile
@@ -126,6 +126,11 @@ services:
       - "3003:3000"
     environment:
       REDIS_URI: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NOTIFICATIONS_KEY: notifications
+      READ_STATUS_KEY_PREFIX: 'notification_reads:'
+      JWT_SECRET_KEY: your_secret_key
     restart: always
     depends_on:
       - redis
@@ -136,7 +141,7 @@ services:
       - backend-network
 
   # Databases
-  mongo: #TODO: Da rivedere
+  mongo:
     image: mongo:6
     container_name: mongo
     ports:
@@ -150,7 +155,7 @@ services:
     networks:
       - backend-network
 
-  postgres: #TODO: Da rivedere
+  postgres:
     image: postgres:15
     container_name: postgres
     ports:
@@ -166,7 +171,7 @@ services:
     networks:
       - backend-network
 
-  redis: #TODO: Da rivedere
+  redis:
     image: redis:7
     container_name: redis
     ports:

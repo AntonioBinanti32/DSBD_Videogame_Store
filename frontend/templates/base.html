@@ -12,7 +12,7 @@
             {% if unread_notifications %}
                 let notifications = {{ unread_notifications | tojson }};
                 notifications.forEach(function(notification) {
-                    alert("New Notification: " + notification.Message);
+                    alert("New Notification: " + notification.message);
                 });
             {% endif %}
         });

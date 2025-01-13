@@ -176,7 +176,8 @@ def add_purchase_route():
 
         notify_game_catalog_game(game_title, response["remaining_copies"])
 
-        #notify_game_catalog_game(game_title, remaining_copies) #TODO: Implementare notifica ad utente admin
+        notification = f"L'utente {username} ha acquistato {quantity} copia/e del gioco {game_title}"
+        notify_notification_service_admin(notification)
 
         return jsonify({'response': response,'error': False, 'message': 'Reservation added successfully'}), 200
 
@@ -212,7 +213,6 @@ def get_all_purchases_route():
         if not verify_token(token, actual_user, JWT_SECRET_KEY):
             return jsonify({'error': True, 'message': 'Token verification failed'}), 401
         purchases = get_all_purchases()
-        logger.info(f"\n\n\nAll purchases {purchases}\n\n\n")
         return jsonify({'purchases': purchases, 'error': False, 'message': 'User fetched successfully'}), 200
 
     except KeyError:

@@ -86,3 +86,49 @@ def notify_order_service_delete_game(title):
 
     except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+
+def notify_notification_service(users_list, message):
+    try:
+        if not users_list or not isinstance(users_list, list):
+            raise ValueError("user_list deve essere una lista non vuota.")
+        if not message or not isinstance(message, str):
+            raise ValueError("message deve essere una stringa non vuota.")
+
+        message = {
+            "users": users_list,
+            "message": message}
+
+        future = producer.send('notification', value=message)
+
+        result = future.get(timeout=10)
+        logger.info(f"Messaggio inviato con successo a Kafka: {result}")
+
+    except KafkaError as ke:
+        raise NotificationError(f"Errore durante l'invio del messaggio a Kafka: {str(ke)}") from ke
+
+    except ValueError as ve:
+        raise NotificationError(f"Errore nella validazione del messaggio: {str(ve)}") from ve
+
+    except Exception as e:
+        raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+
+def notify_notification_service_admin(message):
+    try:
+        if not message or not isinstance(message, str):
+            raise ValueError("message deve essere una stringa non vuota.")
+
+        message = {"message": message}
+
+        future = producer.send('admin-notification', value=message)
+
+        result = future.get(timeout=10)
+        logger.info(f"Messaggio inviato con successo a Kafka: {result}")
+
+    except KafkaError as ke:
+        raise NotificationError(f"Errore durante l'invio del messaggio a Kafka: {str(ke)}") from ke
+
+    except ValueError as ve:
+        raise NotificationError(f"Errore nella validazione del messaggio: {str(ve)}") from ve
+
+    except Exception as e:
+        raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e

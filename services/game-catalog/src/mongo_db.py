@@ -30,6 +30,11 @@ class MongoDB:
         self.user_collection = self.db["users"]
         self.game_collection = self.db["games"]
 
+    def get_all_users(self):
+        usernames_cursor = self.user_collection.find({}, {"_id": 0, "username": 1})
+        usernames = [user['username'] for user in usernames_cursor]
+        return usernames
+
     def get_user_preferred_games(self, username):
         try:
             # Recupera l'utente
