@@ -1,0 +1,1172 @@
+apiVersion: networking.k8s.io/v1
+kind: Ingress
+metadata:
+  name: frontend-nginx-ingress
+  namespace: default
+  annotations:
+    nginx.ingress.kubernetes.io/limit-rate: "15" # Limita il numero di richieste per IP
+    #nginx.ingress.kubernetes.io/limit-burst-multiplier: "2" # Permette un burst massimo
+    #nginx.ingress.kubernetes.io/rewrite-target: "/" # Riscrittura per adattare le richieste
+    #nginx.ingress.kubernetes.io/use-regex: "true"
+spec:
+  ingressClassName: nginx
+  rules:
+  - host: store.com #TODO: Aggiungere in etc/hosts -> 127.0.0.1 store.com
+    http:
+      paths:
+        - path: /
+          pathType: Prefix
+          backend:
+            service:
+              name: frontend
+              port:
+                number: 3004
+
+---
+# Reverse proxy
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: nginx-config
+  namespace: default
+data:
+  default.conf: |
+
+    server {
+        listen 80;
+
+        # Game Catalog Service
+        location /game-catalog/ {
+            rewrite ^/game-catalog(/.*)$ $1 break;
+            proxy_pass http://game-catalog:3001;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Order Service
+        location /order-service/ {
+            rewrite ^/order-service(/.*)$ $1 break;
+            proxy_pass http://order-service:3002;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Notification Service
+        location /notification-service/ {
+            rewrite ^/notification-service(/.*)$ $1 break;
+            proxy_pass http://notification-service:3003;
+            proxy_set_header Host $host;
+            proxy_set_header X-Real-IP $remote_addr;
+            proxy_set_header X-Forwarded-For $proxy_add_x_forwarded_for;
+        }
+
+        # Monitoraggio statistiche NGINX
+        location /nginx_status {
+            stub_status on;
+            access_log off;
+            allow 127.0.0.1;  # Consente solo richieste locali
+            deny all;
+        }
+    }
+
+
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: nginx-reverse-proxy
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: nginx
+  template:
+    metadata:
+      labels:
+        app: nginx
+    spec:
+      containers:
+        - name: nginx
+          image: nginx:latest
+          ports:
+            - containerPort: 80
+          volumeMounts:
+            - name: nginx-config
+              mountPath: /etc/nginx/conf.d/default.conf
+              subPath: default.conf
+      volumes:
+        - name: nginx-config
+          configMap:
+            name: nginx-config
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: nginx-reverse-proxy
+  namespace: default
+spec:
+  selector:
+    app: nginx
+  ports:
+    - protocol: TCP
+      port: 80
+      targetPort: 80
+
+---
+# Game catalog
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: game-catalog
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: game-catalog
+  template:
+    metadata:
+      labels:
+        app: game-catalog
+    spec:
+      containers:
+      - name: game-catalog
+        image: game-catalog:1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: MONGO_URI
+          value: "mongodb://mongo:27017/game-catalog"
+        - name: MONGO_HOST
+          value: "mongo"
+        - name: MONGO_PORT
+          value: "27017"
+        - name: MONGO_DB_NAME
+          value: "game-catalog"
+        - name: MONGO_USER
+          value:
+        - name: MONGO_PASSWORD
+          value:
+        - name: JWT_SECRET_KEY
+          value: "your_secret_key"
+        - name: KAFKA_URI
+          value: "my-kafka:9092"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: game-catalog
+  namespace: default
+spec:
+  ports:
+  - port: 3001
+    targetPort: 3000
+  selector:
+    app: game-catalog
+
+---
+# Order service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: order-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: order-service
+  template:
+    metadata:
+      labels:
+        app: order-service
+    spec:
+      containers:
+      - name: order-service
+        image: order-service:1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: POSTGRES_URI
+          value: "postgres://postgres:password@postgres:5432/orders"
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "password"
+        - name: POSTGRES_DB
+          value: "orders"
+        - name: POSTGRES_HOST
+          value: "postgres"
+        - name: JWT_SECRET_KEY
+          value: "your_secret_key"
+        - name: KAFKA_URI
+          value: "my-kafka:9092"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: order-service
+  namespace: default
+spec:
+  ports:
+  - port: 3002
+    targetPort: 3000
+  selector:
+    app: order-service
+
+---
+# Notification service
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: notification-service
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: notification-service
+  template:
+    metadata:
+      labels:
+        app: notification-service
+    spec:
+      containers:
+      - name: notification-service
+        image: notification-service:1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: REDIS_URI
+          value: "redis://redis:6379"
+        - name: REDIS_HOST
+          value: "redis"
+        - name: REDIS_PORT
+          value: "6379"
+        - name: NOTIFICATIONS_KEY
+          value: "notifications"
+        - name: READ_STATUS_KEY_PREFIX
+          value: "notification_reads"
+        - name: JWT_SECRET_KEY
+          value: "your_secret_key"
+        - name: KAFKA_URI
+          value: "my-kafka:9092"
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: notification-service
+  namespace: default
+spec:
+  ports:
+  - port: 3003
+    targetPort: 3000
+  selector:
+    app: notification-service
+
+---
+# Frontend
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: frontend
+  template:
+    metadata:
+      labels:
+        app: frontend
+    spec:
+      containers:
+        - name: frontend
+          image: frontend:1.0
+          ports:
+            - containerPort: 3000
+          volumeMounts:
+            - name: custom-hosts-volume
+              mountPath: /etc/hosts
+              subPath: hosts  # Monta il file hosts del ConfigMap in /etc/hosts
+      volumes:
+        - name: custom-hosts-volume
+          configMap:
+            name: custom-hosts  # ConfigMap che contiene il file hosts
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: frontend
+  namespace: default
+spec:
+  ports:
+  - port: 3004
+    targetPort: 3000
+  selector:
+    app: frontend
+
+---
+apiVersion: v1 #Per inserire dominio in frontend
+kind: ConfigMap
+metadata:
+  name: custom-hosts
+  namespace: default
+data:
+  hosts: |
+    127.0.0.1 reverse-proxy-ingress.com
+
+---
+# Zookeeper
+apiVersion: v1
+kind: Service
+metadata:
+  name: zookeeper
+  namespace: default
+spec:
+  ports:
+    - port: 2181
+      targetPort: 2181
+  selector:
+    app: zookeeper
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: zookeeper
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: zookeeper
+  template:
+    metadata:
+      labels:
+        app: zookeeper
+    spec:
+      containers:
+        - name: zookeeper
+          image: confluentinc/cp-zookeeper:7.3.0
+          ports:
+            - containerPort: 2181
+          env:
+            - name: ZOOKEEPER_CLIENT_PORT
+              value: "2181"
+            - name: ZOOKEEPER_TICK_TIME
+              value: "2000"
+            - name: ZOOKEEPER_SERVER_ID
+              value: "1"  # Specifica un ID univoco per il tuo server ZooKeeper
+            - name: ZOOKEEPER_SERVERS
+              value: "zookeeper:2888:3888"  # Questo è un esempio se usi un solo nodo; in un cluster aggiungi altri server
+
+
+---
+# Kafka
+apiVersion: v1
+kind: Service
+metadata:
+  name: my-kafka
+  namespace: default
+spec:
+  ports:
+    - port: 9092
+      targetPort: 9092
+  selector:
+    app: kafka
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: kafka
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: kafka
+  template:
+    metadata:
+      labels:
+        app: kafka
+    spec:
+      containers:
+        - name: kafka
+          image: confluentinc/cp-kafka:7.3.0
+          ports:
+            - containerPort: 9092
+          env:
+            - name: KAFKA_BROKER_ID
+              value: "1"
+            - name: KAFKA_ZOOKEEPER_CONNECT
+              value: "zookeeper:2181"
+            - name: KAFKA_LISTENER_SECURITY_PROTOCOL_MAP
+              value: "PLAINTEXT:PLAINTEXT"
+            - name: KAFKA_ADVERTISED_LISTENERS
+              value: "PLAINTEXT://my-kafka:9092"
+            - name: KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR
+              value: "1"
+            - name: KAFKA_LISTENERS
+              value: "PLAINTEXT://0.0.0.0:9092"
+            - name: KAFKA_MAX_MESSAGE_SIZE
+              value: "209715200"  # 200MB
+            - name: KAFKA_MESSAGE_MAX_BYTES
+              value: "209715200"  # 200MB
+
+---
+# MongoDB
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: mongo-data
+spec:
+  capacity:
+    storage: 5Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/mongo
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: mongo-data-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 5Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: mongo-init
+  namespace: default
+data:
+  init.js: |
+    db = db.getSiblingDB('game-catalog'); // Seleziona il database 'game-catalog'
+
+    db.createCollection('games'); // Crea la collezione 'games' se non esiste
+    db.createCollection('users'); // Crea la collezione 'users' se non esiste
+    
+    db.users.insertOne({
+      "username": "admin",
+      "reviews": []
+    });
+    
+    db.games.insertMany([
+      {
+        "_id": ObjectId("6665fb90a4fb25066b6207f2"),
+        "title": "dragon ball",
+        "genre": "genre",
+        "release_date": new Date(-1000),
+        "developer": "developer",
+        "price": 69.99,
+        "stock": 10,
+        "description": "description",
+        "image_url": "https://cdn11.bigcommerce.com/s-xs1cevxe43/images/stencil/1280x1280/attribute_rule_images/16068_source_1717799733.png",
+        "reviews": [
+          {
+            "username": "antonio",
+            "review_text": "test",
+            "rating": 4,
+            "created_at": new Date("2024-06-09T17:27:40.599Z")
+          },
+          {
+            "username": "a",
+            "review_text": "wow",
+            "rating": 10,
+            "created_at": new Date("2024-06-11T13:26:34.314Z")
+          },
+          {
+            "username": "f",
+            "review_text": "defrgv",
+            "rating": 2,
+            "created_at": new Date("2024-06-17T14:32:55.870Z")
+          },
+          {
+            "username": "z",
+            "review_text": "Great",
+            "rating": 4,
+            "created_at": new Date("2024-06-25T08:44:32.406Z")
+          }
+        ]
+      },
+      {
+        "_id": ObjectId("66670e6eb31b2d055e43bc98"),
+        "title": "bss",
+        "genre": "TCG",
+        "release_date": new Date("2024-08-14T23:00:00.000Z"),
+        "developer": "Bandai",
+        "price": 120.2,
+        "stock": 97,
+        "description": "The best",
+        "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQg8bCMLvXguA_W1ac7FIIs18JwBKsYsgLK5w&s"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2bd"),
+        "title": "The Legend of Zelda: Breath of the Wild",
+        "genre": "Action-adventure",
+        "release_date": new Date("2017-03-03T00:00:00.000Z"),
+        "developer": "Nintendo EPD",
+        "price": 59.99,
+        "stock": 100,
+        "description": "An open-world action-adventure game set in the kingdom of Hyrule.",
+        "image_url": "https://m.media-amazon.com/images/I/517lG2g5ZiL._AC_UF1000,1000_QL80_.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2be"),
+        "title": "The Witcher 3: Wild Hunt",
+        "genre": "Action RPG",
+        "release_date": new Date("2015-05-19T00:00:00.000Z"),
+        "developer": "CD Projekt Red",
+        "price": 49.99,
+        "stock": 75,
+        "description": "A story-driven open world RPG set in a visually stunning fantasy universe.",
+        "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRLf2Em-HSjhelvKPoj7NQjpxgBWALxCAPdRw&s"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2bf"),
+        "title": "Red Dead Redemption 2",
+        "genre": "Action-adventure",
+        "release_date": new Date("2018-10-26T00:00:00.000Z"),
+        "developer": "Rockstar Studios",
+        "price": 69.99,
+        "stock": 80,
+        "description": "An epic tale of life in America's unforgiving heartland.",
+        "image_url": "https://upload.wikimedia.org/wikipedia/en/thumb/4/44/Red_Dead_Redemption_II.jpg/220px-Red_Dead_Redemption_II.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c0"),
+        "title": "Persona 5",
+        "genre": "JRPG",
+        "release_date": new Date("2016-09-15T00:00:00.000Z"),
+        "developer": "Atlus",
+        "price": 39.99,
+        "stock": 90,
+        "description": "A role-playing video game developed by Atlus.",
+        "image_url": "https://image.api.playstation.com/cdn/EP4062/CUSA06638_00/0fSaYhFhEVP183JLTwVec7qkzmaHNMS2.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c1"),
+        "title": "Super Mario Odyssey",
+        "genre": "Platformer",
+        "release_date": new Date("2017-10-27T00:00:00.000Z"),
+        "developer": "Nintendo EPD",
+        "price": 49.99,
+        "stock": 85,
+        "description": "A 3D platformer featuring Mario and his new ally Cappy.",
+        "image_url": "https://sm.ign.com/t/ign_it/image/e/e3-2017-su/e3-2017-super-mario-odyssey-hands-on-preview-a-brilliantly-b_zhsa.1280.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c2"),
+        "title": "Cyberpunk 2077",
+        "genre": "Action RPG",
+        "release_date": new Date("2020-12-10T00:00:00.000Z"),
+        "developer": "CD Projekt Red",
+        "price": 59.99,
+        "stock": 70,
+        "description": "An open-world action-adventure story set in Night City.",
+        "image_url": "https://upload.wikimedia.org/wikipedia/en/9/9f/Cyberpunk_2077_box_art.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c3"),
+        "title": "God of War",
+        "genre": "Action-adventure",
+        "release_date": new Date("2018-04-20T00:00:00.000Z"),
+        "developer": "Santa Monica Studio",
+        "price": 49.99,
+        "stock": 80,
+        "description": "An action-adventure game that chronicles the journey of Kratos.",
+        "image_url": "https://image.api.playstation.com/vulcan/ap/rnd/202207/1210/4xJ8XB3bi888QTLZYdl7Oi0s.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c4"),
+        "title": "The Last of Us Part II",
+        "genre": "Action-adventure",
+        "release_date": new Date("2020-06-19T00:00:00.000Z"),
+        "developer": "Naughty Dog",
+        "price": 59.99,
+        "stock": 75,
+        "description": "A sequel to The Last of Us, an action-adventure game set in a post-apocalyptic world.",
+        "image_url": "https://image.api.playstation.com/vulcan/ap/rnd/202311/1717/b3e5dd741258cd53af1f7d8b75406c07173c956567471757.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c5"),
+        "title": "Animal Crossing: New Horizons",
+        "genre": "Social simulation",
+        "release_date": new Date("2020-03-20T00:00:00.000Z"),
+        "developer": "Nintendo EPD",
+        "price": 49.99,
+        "stock": 90,
+        "description": "A life simulation video game developed and published by Nintendo.",
+        "image_url": "https://www.pokemonmillennium.net/wp-content/uploads/2020/03/copertina_animalcrossingcartridge.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c6"),
+        "title": "Final Fantasy VII Remake",
+        "genre": "Action RPG",
+        "release_date": new Date("2020-04-10T00:00:00.000Z"),
+        "developer": "Square Enix",
+        "price": 59.99,
+        "stock": 80,
+        "description": "A remake of the 1997 PlayStation game Final Fantasy VII.",
+        "image_url": "https://www.italiatopgames.it/wp-content/uploads/2019/09/405.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c7"),
+        "title": "Mario Kart 8 Deluxe",
+        "genre": "Kart racing",
+        "release_date": new Date("2017-04-28T00:00:00.000Z"),
+        "developer": "Nintendo EPD",
+        "price": 49.99,
+        "stock": 85,
+        "description": "A kart racing video game featuring characters from the Mario series.",
+        "image_url": "https://www.tomshw.it/storage/media/2023/11/5615/pass-mario-kart-8---copertina-BF23.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c8"),
+        "title": "Bloodborne",
+        "genre": "Action RPG",
+        "release_date": new Date("2015-03-24T00:00:00.000Z"),
+        "developer": "FromSoftware",
+        "price": 39.99,
+        "stock": 70,
+        "description": "An action role-playing game developed by FromSoftware.",
+        "image_url": "https://sm.ign.com/ign_it/game/b/bloodborne/bloodborne_8nrj.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2c9"),
+        "title": "Hades",
+        "genre": "Roguelike",
+        "release_date": new Date("2020-09-17T00:00:00.000Z"),
+        "developer": "Supergiant Games",
+        "price": 24.99,
+        "stock": 90,
+        "description": "A roguelike dungeon crawler video game developed and published by Supergiant Games.",
+        "image_url": "https://assetsio.gnwcdn.com/news-videogiochi-hades-disponibile-console-playstation-xbox-abbonati-xbox-game-pass-1628862573220.jpg?width=1200&height=1200&fit=crop&quality=100&format=png&enable=upscale&auto=webp"
+      },
+      {
+      "_id": ObjectId("667eb250c0c0a40f5325d2ca"),
+      "title": "Sekiro: Shadows Die Twice",
+      "genre": "Action-adventure",
+      "release_date": new Date("2019-03-22T00:00:00.000Z"),
+      "developer": "FromSoftware",
+      "price": 59.99,
+      "stock": 75,
+      "description": "An action-adventure game developed by FromSoftware.",
+      "image_url": "https://p1.hiclipart.com/preview/197/514/344/sekiro-shadows-die-twice-icon-sekiro-shadows-die-twice-png-clipart-thumbnail.jpg",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2cb"),
+      "title": "Ghost of Tsushima",
+      "genre": "Action-adventure",
+      "release_date": new Date("2020-07-17T00:00:00.000Z"),
+      "developer": "Sucker Punch Productions",
+      "price": 49.99,
+      "stock": 80,
+      "description": "An action-adventure game set in feudal Japan.",
+      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQ7n9u-kFJFMig8LiLEGjUgmadNo1SCpy3ouA&s",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2cc"),
+      "title": "Minecraft",
+      "genre": "Sandbox",
+      "release_date": new Date("2011-11-18T00:00:00.000Z"),
+      "developer": "Mojang Studios",
+      "price": 29.99,
+      "stock": 95,
+      "description": "A sandbox video game developed by Mojang Studios.",
+      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcRrhj9tTf4WFrWAqqpX0KXHZCtIoKkAfJkbXA&s",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2cd"),
+      "title": "Assassin's Creed Valhalla",
+      "genre": "Action-adventure",
+      "release_date": new Date("2020-11-10T00:00:00.000Z"),
+      "developer": "Ubisoft Montreal",
+      "price": 59.99,
+      "stock": 75,
+      "description": "An action role-playing video game developed by Ubisoft.",
+      "image_url": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/557703a2-f0df-4e9e-8006-f1a8a0666122/dedd7v9-b9238065-6651-4325-831f-5b36e5fa6bdb.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcLzU1NzcwM2EyLWYwZGYtNGU5ZS04MDA2LWYxYThhMDY2NjEyMlwvZGVkZDd2OS1iOTIzODA2NS02NjUxLTQzMjUtODMxZi01YjM2ZTVmYTZiZGIucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.XpvMEUWzDlEuIfWiuW9g2F6s3gdc7Osk32PN03UQmUU",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2ce"),
+      "title": "Pokémon Sword and Shield",
+      "genre": "RPG",
+      "release_date": new Date("2019-11-15T00:00:00.000Z"),
+      "developer": "Game Freak",
+      "price": 59.99,
+      "stock": 85,
+      "description": "A role-playing video game developed by Game Freak and published by The Pokémon Company and Nintendo.",
+      "image_url": "https://static1.srcdn.com/wordpress/wp-content/uploads/2021/09/Pok--mon-Sword-Shield-Snoo-Reddit.jpg",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2cf"),
+      "title": "Uncharted 4: A Thief's End",
+      "genre": "Action-adventure",
+      "release_date": new Date("2016-05-10T00:00:00.000Z"),
+      "developer": "Naughty Dog",
+      "price": 39.99,
+      "stock": 80,
+      "description": "An action-adventure game developed by Naughty Dog.",
+      "image_url": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/i/4d04d46d-481e-452a-9bfd-75a8c1cc65a3/dfhe8il-908ca101-83b9-4d22-8e17-4ccd76c40a79.png",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d0"),
+      "title": "Overwatch",
+      "genre": "First-person shooter",
+      "release_date": new Date("2016-05-24T00:00:00.000Z"),
+      "developer": "Blizzard Entertainment",
+      "price": 39.99,
+      "stock": 70,
+      "description": "A team-based multiplayer first-person shooter developed and published by Blizzard Entertainment.",
+      "image_url": "https://upload.wikimedia.org/wikipedia/en/5/51/Overwatch_cover_art.jpg",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d1"),
+      "title": "The Elder Scrolls V: Skyrim",
+      "genre": "Action RPG",
+      "release_date": new Date("2011-11-11T00:00:00.000Z"),
+      "developer": "Bethesda Game Studios",
+      "price": 39.99,
+      "stock": 85,
+      "description": "An action role-playing game developed by Bethesda Game Studios.",
+      "image_url": "https://upload.wikimedia.org/wikipedia/en/1/15/The_Elder_Scrolls_V_Skyrim_cover.png",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d2"),
+      "title": "Death Stranding",
+      "genre": "Action",
+      "release_date": new Date("2019-11-08T00:00:00.000Z"),
+      "developer": "Kojima Productions",
+      "price": 49.99,
+      "stock": 75,
+      "description": "An action game developed by Kojima Productions.",
+      "image_url": "https://a.storyblok.com/f/178900/640x360/dd580a03cd/385b98fc08d03cb3d5de8fcd2bdc32891563804831_full.png/m/640x360",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d3"),
+      "title": "Dark Souls III",
+      "genre": "Action RPG",
+      "release_date": new Date("2016-04-12T00:00:00.000Z"),
+      "developer": "FromSoftware",
+      "price": 39.99,
+      "stock": 70,
+      "description": "An action role-playing game developed by FromSoftware.",
+      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcT8TX2ZQ3Q0mwJl6lF1lMa3EHNf5ibGfqvyxg&s",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d4"),
+      "title": "Marvel\'s Spider-Man",
+      "genre": "Action-adventure",
+      "release_date": new Date("2018-09-07T00:00:00.000Z"),
+      "developer": "Insomniac Games",
+      "price": 39.99,
+      "stock": 80,
+      "description": "An action-adventure game based on the Marvel Comics superhero Spider-Man.",
+      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcQZ6jiJdVwM2gG7yYgKqZgf3DwgGGeoMLR01w&s",
+      "reviews": []
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d5"),
+      "title": "Horizon Zero Dawn",
+      "genre": "Action RPG",
+      "release_date": new Date("2017-02-28T00:00:00.000Z"),
+      "developer": "Guerrilla Games",
+      "price": 39.99,
+      "stock": 84,
+      "description": "An action role-playing game developed by Guerrilla Games.",
+      "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcTdoXfFw3V2lAH6W7MLPQgxPEHGhRjZ-iHtyg&s",
+      "reviews": [
+        {
+          "username": "admin",
+          "review_text": "Great",
+          "rating": 4,
+          "created_at": new Date("2024-07-14T18:19:49.618Z")
+        }
+      ]
+    },
+    {
+      "_id": ObjectId("667eb250c0c0a40f5325d2d6"),
+      "title": "Final Fantasy XIV",
+      "genre": "MMORPG",
+      "release_date": new Date("2010-09-30T00:00:00.000Z"),
+      "developer": "Square Enix",
+      "price": 29.99,
+      "stock": 90,
+      "description": "A massively multiplayer online role-playing game developed by Square Enix.",
+      "image_url": "https://cdn11.bigcommerce.com/s-kqbs9oimhc/images/stencil/1280x1280/products/2600/13957/FFXIV_DT_Agnostic_Packshot_Standard_Edition_1000x1436_EN_v1__62092.1711355937.jpg?c=1",
+      "reviews": []
+    },
+    {
+        "_id": ObjectId("667eb250c0c0a40f5325d2d7"),
+        "title": "NieR: Automata",
+        "genre": "Action RPG",
+        "release_date": new Date("2017-02-23T00:00:00.000Z"),
+        "developer": "PlatinumGames",
+        "price": 49.99,
+        "stock": 75,
+        "description": "An action role-playing game developed by PlatinumGames.",
+        "image_url": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/48192ce8-2589-4a6e-83a8-4363db9a5889/dbdg0kr-9eae1149-9548-4a4d-a758-615c97aef25e.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcLzQ4MTkyY2U4LTI1ODktNGE2ZS04M2E4LTQzNjNkYjlhNTg4OVwvZGJkZzBrci05ZWFlMTE0OS05NTQ4LTRhNGQtYTc1OC02MTVjOTdhZWYyNWUucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.suSmnL0zSq0m9wqRBYCwXVM_2YKaEjzA8-z4RM4wyN0"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2d8"),
+        "title": "Destiny 2",
+        "genre": "First-person shooter",
+        "release_date": new Date("2017-09-06T00:00:00.000Z"),
+        "developer": "Bungie",
+        "price": 29.99,
+        "stock": 80,
+        "description": "A multiplayer first-person shooter video game developed by Bungie.",
+        "image_url": "https://sm.ign.com/t/ign_it/screenshot/default/packshots-2d-pc_up49.1080.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2d9"),
+        "title": "Demon\'s Souls",
+        "genre": "Action RPG",
+        "release_date": new Date("2020-11-12T00:00:00.000Z"),
+        "developer": "Bluepoint Games / Japan Studio",
+        "price": 69.99,
+        "stock": 70,
+        "description": "A remake of the original Demon's Souls.",
+        "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSM8AvxdF0RG6MFvAuUeJGKzWoPz4N1s3-coQ&s"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2da"),
+        "title": "Control",
+        "genre": "Action-adventure",
+        "release_date": new Date("2019-08-27T00:00:00.000Z"),
+        "developer": "Remedy Entertainment",
+        "price": 39.99,
+        "stock": 75,
+        "description": "An action-adventure video game developed by Remedy Entertainment.",
+        "image_url": "https://image.api.playstation.com/vulcan/ap/rnd/202008/2111/hvVTsd8akckaGtN2eZ3yIuwc.png"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2db"),
+        "title": "The Legend of Zelda: Skyward Sword HD",
+        "genre": "Action-adventure",
+        "release_date": new Date("2021-07-16T00:00:00.000Z"),
+        "developer": "Nintendo EPD",
+        "price": 59.99,
+        "stock": 85,
+        "description": "An action-adventure game and the sixteenth main installment in The Legend of Zelda series.",
+        "image_url": "https://assets-prd.ignimgs.com/2021/02/23/zelda-skyward-sword-hd-button-1614064616471.jpg"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2dc"),
+        "title": "Bayonetta 2",
+        "genre": "Action",
+        "release_date": new Date("2014-09-20T00:00:00.000Z"),
+        "developer": "PlatinumGames",
+        "price": 49.99,
+        "stock": 80,
+        "description": "An action game developed by PlatinumGames.",
+        "image_url": "https://images-wixmp-ed30a86b8c4ca887773594c2.wixmp.com/f/9223f636-4088-439b-b879-a939912979c4/deiildu-64dbac44-87f9-4eb6-bcfd-1e148142a16b.png?token=eyJ0eXAiOiJKV1QiLCJhbGciOiJIUzI1NiJ9.eyJzdWIiOiJ1cm46YXBwOjdlMGQxODg5ODIyNjQzNzNhNWYwZDQxNWVhMGQyNmUwIiwiaXNzIjoidXJuOmFwcDo3ZTBkMTg4OTgyMjY0MzczYTVmMGQ0MTVlYTBkMjZlMCIsIm9iaiI6W1t7InBhdGgiOiJcL2ZcLzkyMjNmNjM2LTQwODgtNDM5Yi1iODc5LWE5Mzk5MTI5NzljNFwvZGVpaWxkdS02NGRiYWM0NC04N2Y5LTRlYjYtYmNmZC0xZTE0ODE0MmExNmIucG5nIn1dXSwiYXVkIjpbInVybjpzZXJ2aWNlOmZpbGUuZG93bmxvYWQiXX0.s2ycrSNuowJ_Q2s8YXe0DRH2-tmLlJC8OxmwdpODMh8"
+      },
+      {
+        "_id": ObjectId("667eb250c0c0a40f5325d2dd"),
+        "title": "Half-Life: Alyx",
+        "genre": "VR First-person shooter",
+        "release_date": new Date("2020-03-23T00:00:00.000Z"),
+        "developer": "Valve",
+        "price": 59.99,
+        "stock": 70,
+        "description": "A virtual reality (VR) first-person shooter developed and published by Valve.",
+        "image_url": "https://encrypted-tbn0.gstatic.com/images?q=tbn:ANd9GcSLYqB4zuPhphrst04rTHIhVSa1eLIPlRgXSg&s"
+      }
+    ]);
+
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: mongo
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: mongo
+  template:
+    metadata:
+      labels:
+        app: mongo
+    spec:
+      containers:
+      - name: mongo
+        image: mongo:6
+        ports:
+        - containerPort: 27017
+        volumeMounts:
+        - name: mongo-data
+          mountPath: /data/db
+        - name: mongo-init
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: mongo-data
+        persistentVolumeClaim:
+          claimName: mongo-data-pvc
+      - name: mongo-init
+        configMap:
+          name: mongo-init
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: mongo
+  namespace: default
+spec:
+  ports:
+  - port: 27017
+    targetPort: 27017
+  selector:
+    app: mongo
+
+---
+# Postgres
+apiVersion: v1
+kind: PersistentVolume
+metadata:
+  name: postgres-data
+spec:
+  capacity:
+    storage: 1Gi
+  accessModes:
+    - ReadWriteOnce
+  hostPath:
+    path: /data/postgres # hostPath per test locali
+
+---
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: postgres-data-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: postgres-init
+  namespace: default
+data:
+  init.sql: |
+    CREATE TABLE IF NOT EXISTS all_users (
+        id SERIAL PRIMARY KEY,
+        username VARCHAR(255) UNIQUE NOT NULL,
+        password VARCHAR(255) NOT NULL,
+        image_url TEXT NOT NULL,
+        created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE games (
+        id SERIAL PRIMARY KEY,
+        title VARCHAR(255) UNIQUE NOT NULL,
+        num_copies INT NOT NULL,
+        price NUMERIC(10, 2) NOT NULL
+    );
+    
+    CREATE TABLE reservations (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES all_users(id) ON DELETE CASCADE,
+        game_id INT REFERENCES games(id) ON DELETE CASCADE,
+        num_copies INT NOT NULL,
+        price NUMERIC(10, 2) NOT NULL,
+        reservation_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    CREATE TABLE IF NOT EXISTS purchases (
+        id SERIAL PRIMARY KEY,
+        user_id INT REFERENCES all_users(id) ON DELETE CASCADE,
+        game_id INT REFERENCES games(id) ON DELETE CASCADE,
+        num_copies INT NOT NULL CHECK (num_copies > 0),
+        total_price NUMERIC(10, 2) NOT NULL CHECK (total_price >= 0),
+        purchase_date TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+    );
+    
+    INSERT INTO all_users (username, password, image_url)
+    VALUES ('admin', '$2b$12$SVFmb2K7Og5/ZitKuw4leOKqDXME5rcNRlRNIUG7z/onAessZ6GDO', 'https://static.vecteezy.com/system/resources/thumbnails/009/636/683/small_2x/admin-3d-illustration-icon-png.png') ON CONFLICT DO NOTHING;;
+    
+    INSERT INTO games (title, num_copies, price)
+    VALUES
+        ('dragon ball', 10, 69.99),
+        ('bss', 97, 120.2),
+        ('The Legend of Zelda: Breath of the Wild', 100, 59.99),
+        ('The Witcher 3: Wild Hunt', 75, 49.99),
+        ('Red Dead Redemption 2', 80, 69.99),
+        ('Persona 5', 90, 39.99),
+        ('Super Mario Odyssey', 85, 49.99),
+        ('Cyberpunk 2077', 70, 59.99),
+        ('God of War', 80, 49.99),
+        ('The Last of Us Part II', 75, 59.99),
+        ('Animal Crossing: New Horizons', 90, 49.99),
+        ('Final Fantasy VII Remake', 80, 59.99),
+        ('Mario Kart 8 Deluxe', 85, 49.99),
+        ('Bloodborne', 70, 39.99),
+        ('Hades', 90, 24.99),
+        ('Sekiro: Shadows Die Twice', 75, 59.99),
+        ('Ghost of Tsushima', 80, 49.99),
+        ('Minecraft', 95, 29.99),
+        ('Assassin''s Creed Valhalla', 75, 59.99),
+        ('Pokémon Sword and Shield', 85, 59.99),
+        ('Uncharted 4: A Thief''s End', 80, 39.99),
+        ('Overwatch', 70, 39.99),
+        ('The Elder Scrolls V: Skyrim', 85, 39.99),
+        ('Death Stranding', 75, 49.99),
+        ('Dark Souls III', 70, 39.99),
+        ('Marvel''s Spider-Man', 80, 39.99),
+        ('Horizon Zero Dawn', 84, 39.99),
+        ('Final Fantasy XIV', 90, 29.99),
+        ('NieR: Automata', 75, 49.99),
+        ('Destiny 2', 80, 29.99),
+        ('Demon''s Souls', 70, 69.99),
+        ('Control', 75, 39.99),
+        ('The Legend of Zelda: Skyward Sword HD', 85, 59.99),
+        ('Bayonetta 2', 80, 49.99),
+        ('Half-Life: Alyx', 70, 59.99);
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: postgres
+  template:
+    metadata:
+      labels:
+        app: postgres
+    spec:
+      containers:
+      - name: postgres
+        image: postgres:15
+        ports:
+        - containerPort: 5432
+        env:
+        - name: POSTGRES_USER
+          value: "postgres"
+        - name: POSTGRES_PASSWORD
+          value: "password"
+        - name: POSTGRES_DB
+          value: "orders"
+        volumeMounts:
+        - name: postgres-data
+          mountPath: /var/lib/postgresql/data
+        - name: postgres-init
+          mountPath: /docker-entrypoint-initdb.d
+      volumes:
+      - name: postgres-data
+        persistentVolumeClaim:
+          claimName: postgres-data-pvc
+      - name: postgres-init
+        configMap:
+          name: postgres-init
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: postgres
+  namespace: default
+spec:
+  ports:
+  - port: 5432
+    targetPort: 5432
+  selector:
+    app: postgres
+
+
+---
+# Redis
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: redis-data-pvc
+  namespace: default
+spec:
+  accessModes:
+    - ReadWriteOnce
+  resources:
+    requests:
+      storage: 1Gi
+
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: redis
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: redis
+  template:
+    metadata:
+      labels:
+        app: redis
+    spec:
+      containers:
+      - name: redis
+        image: redis:7
+        ports:
+        - containerPort: 6379
+        volumeMounts:
+        - name: redis-data
+          mountPath: /data
+      volumes:
+      - name: redis-data
+        persistentVolumeClaim:
+          claimName: redis-data-pvc
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: redis
+  namespace: default
+spec:
+  ports:
+  - port: 6379
+    targetPort: 6379
+  selector:
+    app: redis

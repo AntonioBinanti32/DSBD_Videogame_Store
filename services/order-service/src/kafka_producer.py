@@ -2,13 +2,16 @@ from kafka import KafkaProducer
 from kafka.errors import KafkaError
 import json
 import logging
+import os
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
 
+KAFKA_URI = os.getenv("KAFKA_URI")
+
 producer = KafkaProducer(
-    bootstrap_servers=['kafka:9092'],
+    bootstrap_servers=[KAFKA_URI],
     value_serializer=lambda v: json.dumps(v).encode('utf-8'),
     max_request_size=209715200
 )

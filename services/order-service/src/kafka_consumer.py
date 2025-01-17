@@ -8,12 +8,14 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
 
+KAFKA_URI = os.getenv("KAFKA_URI")
+
 consumer = KafkaConsumer(
     'order-service-add-game',
     'order-service-update-game',
     'order-service-delete-game',
     group_id='order-service',
-    bootstrap_servers=['kafka:9092'],
+    bootstrap_servers=[KAFKA_URI],
     value_deserializer=lambda v: json.loads(v.decode('utf-8')),
     fetch_max_bytes=209715200
 )

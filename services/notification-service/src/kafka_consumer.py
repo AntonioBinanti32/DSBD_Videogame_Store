@@ -10,6 +10,8 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
 
+KAFKA_URI = os.getenv("KAFKA_URI")
+
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
 REDIS_PORT = os.getenv("REDIS_PORT", "6379")
 
@@ -19,7 +21,7 @@ redis_client = StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=Tr
 consumer = KafkaConsumer(
     "notification",
     "admin-notification",
-    bootstrap_servers=['kafka:9092'],
+    bootstrap_servers=[KAFKA_URI],
     value_deserializer=lambda v: json.loads(v.decode('utf-8')),
     fetch_max_bytes=209715200
 )

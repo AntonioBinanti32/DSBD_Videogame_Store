@@ -295,6 +295,7 @@ def delete_game(gameTitle):
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    logger.info(f"\n\n\nURL: {backend_url}\n\n\n")
     if request.method == 'POST':
         credentials = request.form
         try:

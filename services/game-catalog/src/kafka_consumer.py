@@ -1,3 +1,5 @@
+import os
+
 from kafka import KafkaConsumer
 import json
 from mongo_db import MongoDB
@@ -8,11 +10,13 @@ logger = logging.getLogger()
 logger.setLevel(logging.INFO)
 logging.basicConfig(level=logging.INFO)
 
+KAFKA_URI = os.getenv("KAFKA_URI")
+
 consumer = KafkaConsumer(
     'user-registrations',
     'game-modify',
     group_id='game-catalog',
-    bootstrap_servers=['kafka:9092'],
+    bootstrap_servers=[KAFKA_URI],
     value_deserializer=lambda v: json.loads(v.decode('utf-8')),
     fetch_max_bytes=209715200
 )

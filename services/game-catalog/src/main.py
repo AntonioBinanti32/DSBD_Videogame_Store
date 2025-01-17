@@ -240,4 +240,4 @@ def get_review_by_game_route(title):
 if __name__ == "__main__":
     kafka_thread = threading.Thread(target=listen_order_service, daemon=True)
     kafka_thread.start()
-    app.run(host="0.0.0.0", port=3001, threaded=True)
+    app.run(host="0.0.0.0", port=3000, threaded=True)

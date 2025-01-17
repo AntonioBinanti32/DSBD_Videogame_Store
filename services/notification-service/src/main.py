@@ -89,4 +89,4 @@ def mark_notification_route():
 if __name__ == "__main__":
     kafka_thread_3 = threading.Thread(target=listen_services, daemon=True)
     kafka_thread_3.start()
-    app.run(host="0.0.0.0", port=3003, threaded=True)
+    app.run(host="0.0.0.0", port=3000, threaded=True)

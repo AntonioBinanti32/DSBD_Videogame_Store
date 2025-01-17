@@ -223,4 +223,4 @@ def get_all_purchases_route():
 if __name__ == '__main__':
     kafka_thread_2 = threading.Thread(target=listen_game_catalog, daemon=True)
     kafka_thread_2.start()
-    app.run(host='0.0.0.0', port=3002, threaded=True)
+    app.run(host='0.0.0.0', port=3000, threaded=True)
