@@ -5,6 +5,8 @@ import logging
 from db_redis import *
 from redis import StrictRedis
 import os
+import time
+from metrics import MESSAGES_PROCESSED, REQUEST_LATENCY
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -38,7 +40,10 @@ def listen_services():
     while True:
         try:
             for message in consumer:
+                start_time = time.time()
                 try:
+                    # Incrementa il contatore per ogni messaggio ricevuto
+                    MESSAGES_PROCESSED.labels(topic=message.topic).inc()
                     # Verifica del messaggio ricevuto
                     if not message or not message.value:
                         raise InvalidMessageError("Messaggio vuoto ricevuto.")
@@ -63,12 +68,13 @@ def listen_services():
         except KafkaConsumerError as kce:
             # Gestione degli errori generali del consumatore Kafka
             logger.info(f"Errore Kafka Consumer: {str(kce)}. Tentativo di ripresa...")
-            import time
             time.sleep(5)
         except Exception as e:
             # Gestione di eventuali altre eccezioni
             logger.info(f"Errore imprevisto nel ciclo Kafka Consumer: {str(e)}")
             raise
+        finally:
+            REQUEST_LATENCY.labels(endpoint="kafka_message_consumer_notification_service").observe(time.time() - start_time)
 
 def handle_notifications(message):
     notification = message.value

@@ -2,6 +2,8 @@ from pymongo import MongoClient
 from pymongo.errors import PyMongoError
 from datetime import datetime
 import logging
+from metrics import DB_REQUEST_COUNT, DB_REQUEST_LATENCY
+import time
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -31,12 +33,16 @@ class MongoDB:
         self.game_collection = self.db["games"]
 
     def get_all_users(self):
+        start_time = time.time()
         usernames_cursor = self.user_collection.find({}, {"_id": 0, "username": 1})
         usernames = [user['username'] for user in usernames_cursor]
+        DB_REQUEST_LATENCY.labels(endpoint="mongo_get_all_users").observe(time.time() - start_time)
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_all_users", http_status=200).inc()
         return usernames
 
     def get_user_preferred_games(self, username):
         try:
+            start_time = time.time()
             # Recupera l'utente
             user_result = self.user_collection.find_one({"username": username})
             if not user_result:
@@ -89,24 +95,33 @@ class MongoDB:
 
             # Ordina i giochi in base al punteggio di preferenza
             games.sort(key=lambda x: x.get("preferenceScore", 0), reverse=True)
-
+            DB_REQUEST_LATENCY.labels(endpoint="mongo_get_user_preferred_games").observe(time.time() - start_time)
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_user_preferred_games", http_status=200).inc()
             return games
 
         except Exception as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_user_preferred_games", http_status=500).inc()
             raise Exception("Errore durante il recupero dei giochi preferiti dell'utente: " + str(e))
 
     def get_game_by_title(self, title):
         try:
+            start_time = time.time()
             game_result = self.game_collection.find_one({"title": title})
             if not game_result:
                 raise Exception("Errore durante il recupero del gioco: Gioco non trovato")
             game_result["_id"] = str(game_result["_id"])
+            DB_REQUEST_LATENCY.labels(endpoint="mongo_get_game_by_title").observe(time.time() - start_time)
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_game_by_title",
+                                    http_status=200).inc()
             return game_result
         except Exception as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_game_by_title",
+                                    http_status=500).inc()
             raise Exception("Errore durante il recupero del gioco: " + str(e))
 
     def add_game(self, title, genre, release_date, developer, price, stock, description, image_url, reviews=None):
 
+        start_time = time.time()
         doc = {
             "title": title,
             "genre": genre,
@@ -127,12 +142,18 @@ class MongoDB:
             game_added_doc = game_added.inserted_id
             if game_added_doc:
                 doc["_id"] = str(game_added_doc)
+                DB_REQUEST_LATENCY.labels(endpoint="mongo_add_game").observe(time.time() - start_time)
+                DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_add_game",
+                                        http_status=200).inc()
                 return doc
         except PyMongoError as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_add_game",
+                                    http_status=500).inc()
             raise Exception("Errore durante l'aggiunta del gioco") from e
 
     def update_game(self, title, updates):
         try:
+            start_time = time.time()
             game_result = self.game_collection.find_one({"title": title})
             if not game_result:
                 raise Exception("Errore durante l'aggiornamento: Gioco non trovato nel catalogo")
@@ -148,12 +169,18 @@ class MongoDB:
 
             updated_game = self.game_collection.find_one({"title": title})
             updated_game["_id"] = str(updated_game["_id"])
+            DB_REQUEST_LATENCY.labels(endpoint="mongo_update_game").observe(time.time() - start_time)
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_update_game",
+                                    http_status=200).inc()
             return updated_game
         except PyMongoError as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_update_game",
+                                    http_status=500).inc()
             raise Exception("Errore durante l'aggiornamento del gioco") from e
 
     def delete_game(self, title):
         try:
+            start_time = time.time()
             game_result = self.game_collection.find_one({"title": title})
             if not game_result:
                 raise Exception("Errore durante l'eliminazione: Gioco non trovato nel catalogo")
@@ -164,12 +191,18 @@ class MongoDB:
 
             game_result2 = self.game_collection.find_one({"title": title})
             if not game_result2:
+                DB_REQUEST_LATENCY.labels(endpoint="mongo_delete_game").observe(time.time() - start_time)
+                DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_delete_game",
+                                        http_status=200).inc()
                 return True
         except PyMongoError as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_delete_game",
+                                    http_status=500).inc()
             raise Exception("Errore durante l'eliminazione del gioco") from e
 
     def add_review(self, username, game_title, review_text, rating):
         try:
+            start_time = time.time()
             game_doc = self.game_collection.find_one({"title": game_title})
             if not game_doc:
                 raise Exception("Gioco non trovato")
@@ -218,24 +251,42 @@ class MongoDB:
                 {"_id": user_id},
                 {"$push": {"reviews": user_review_doc}}
             )
-
+            DB_REQUEST_LATENCY.labels(endpoint="mongo_add_review").observe(time.time() - start_time)
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_add_review",
+                                    http_status=200).inc()
             return True
 
         except Exception as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_add_review",
+                                    http_status=500).inc()
             raise e
         except PyMongoError as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_add_review",
+                                    http_status=500).inc()
             raise Exception("Errore durante l'aggiunta della recensione") from e
 
     def get_review_by_game(self, title):
         try:
+            start_time = time.time()
             game_result = self.game_collection.find_one({"title": title})
             if not game_result:
+                DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_review_by_game",
+                                        http_status=500).inc()
                 raise Exception("Errore durante il recupero del gioco: Gioco non trovato")
             reviews = game_result.get("reviews", [])
             if not reviews:
+                DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_review_by_game",
+                                        http_status=500).inc()
                 raise Exception("Non ci sono recensioni per questo gioco")
+            DB_REQUEST_LATENCY.labels(endpoint="mongo_get_review_by_game").observe(time.time() - start_time)
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_review_by_game",
+                                    http_status=200).inc()
             return reviews
         except Exception as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_review_by_game",
+                                    http_status=500).inc()
             raise e
         except PyMongoError as e:
+            DB_REQUEST_COUNT.labels(method="function_call", endpoint="mongo_get_review_by_game",
+                                    http_status=500).inc()
             raise Exception("Errore durante il recupero delle recensioni") from e

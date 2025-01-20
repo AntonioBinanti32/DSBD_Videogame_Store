@@ -6,6 +6,9 @@ import datetime
 from werkzeug.exceptions import BadRequest
 import os
 import threading
+from prometheus_client import generate_latest
+from metrics import PROMETHEUS_REGISTRY, REQUEST_COUNT, REQUEST_LATENCY
+import time
 
 from db_postgres import *
 from kafka_producer import *
@@ -23,6 +26,28 @@ POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
 POSTGRES_DB = os.getenv("POSTGRES_DB")
 POSTGRES_HOST = os.getenv("POSTGRES_HOST")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
+
+# Middleware per il monitoraggio delle metriche
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def record_metrics(response):
+    latency = time.time() - request.start_time
+    endpoint = request.path
+    status = response.status_code
+
+    # Aggiornamento delle metriche Prometheus
+    REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, http_status=status).inc()
+    REQUEST_LATENCY.labels(endpoint=endpoint).observe(latency)
+
+    return response
+
+# Endpoint per esporre le metriche
+@app.route('/metrics')
+def metrics():
+    return generate_latest(PROMETHEUS_REGISTRY), 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 @app.route("/")
 def home():

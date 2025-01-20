@@ -21,7 +21,7 @@ desiderati e procedere con l'acquisto.
 
 ### Installazione con Docker Compose
 
-1. Decommentare solo il **1° URL** nel file `frontend/config.ini`.
+1. Decommentare solo il **1° URL** nel file `frontend/config.ini` ed eliminare un eventuale immagine creata precedentemente.
 2. Via terminale spostarsi nella cartella dove si trova il file `docker-compose.yml` ed seguire il comando:
    ```bash
    docker-compose up --build
@@ -35,11 +35,12 @@ desiderati e procedere con l'acquisto.
    ```bash
    kubectl apply -f https://raw.githubusercontent.com/kubernetes/ingress-nginx/main/deploy/static/provider/cloud/deploy.yaml
     ```
-2. Modificare il file `/etc/hosts` con privilegi amministrativi, aggiungendo la seguente riga:
+2. Modificare il file `/etc/hosts` con privilegi amministrativi, aggiungendo le seguenti righe:
     ```
     127.0.0.1 store.com
+    127.0.0.1 store-grafana.com
    ```
-3. Decommentare solo il **2° URL** nel `file frontend/config.ini`.
+3. Decommentare solo il **2° URL** nel `file frontend/config.ini` ed eliminare un eventuale immagine creata precedentemente.
 4. Creare le immagini Docker per ogni servizio:
    - Posizionarsi nelle directory contenenti i file `Dockerfile` dei seguenti servizi:
      - `frontend`
@@ -62,3 +63,32 @@ desiderati e procedere con l'acquisto.
 Per accedere alla modalità amministratore, utilizzare le seguenti credenziali:
 - Username: `admin`
 - Password: `0000`
+
+## Monitoring white-box
+### Monitoring con **Grafana**
+1. Dalla distribuzione tramite **Docker-compose** andare su [http://localhost:3005/](http://localhost:3005/) o tramite **Kubernetes** su [http://store-grafana.com](http://store-grafana.com)
+2. Accedere inserendo le seguenti credenziali:
+- Username: `admin`
+- Password: `admin`
+3. Aggiungere **Prometheus** come data source
+   1. Andare su `Home>Connections>Data sources>Add data source` e selezionare `Prometheus`
+   2. Nella pagina di configurazione di Prometheus inserire come **URL** `http://prometheus:9090` (se si sta usando **docker-compose**) o `http://prometheus.default.svc.cluster.local:9090` (se si sta usando **Kubernetes**) e cliccare su '`Save & Test`'
+4. Creazione di una Dashboard per visualizzare le metriche
+   1. Nella barra laterale selezionare `+` e poi `Dashboard`.
+   2. Cliccare su `Add new panel`.
+   3. Nella sezione di configurazione del pannello:
+      - `Metriche`: Scegliere Prometheus come data source.
+      - Nella barra di ricerca delle metriche, digitare le metriche come `http_requests_total` e `http_request_duration_seconds`, per visualizzare le statistiche sulle richieste HTTP.
+   4. Cliccare su `Apply` per aggiungere il pannello alla dashboard.
+
+### Monitoring con **Prometheus**
+1. Andare su [http://localhost:9090](http://localhost:9090).
+2. Nella parte superiore, nwlla sezione `Graph` scrivere le query Prometheus come `http_requests_total` e `http_request_duration_seconds` e clicca su "Execute" per visualizzare i dati.
+
+### Metriche **Prometheus**
+Le metriche per il monitoring **white-box** inserite sono:
+  - `http_requests_total`
+  - `http_request_duration_seconds`
+  - `db_requests_total`
+  - `db_request_duration_seconds`
+  - `kafka_messages_processed_total`

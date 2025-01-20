@@ -6,6 +6,8 @@ from werkzeug.exceptions import BadRequest
 import os
 import logging
 from decimal import Decimal
+from metrics import DB_REQUEST_COUNT, DB_REQUEST_LATENCY
+import time
 
 POSTGRES_USER = os.getenv("POSTGRES_USER")
 POSTGRES_PASSWORD = os.getenv("POSTGRES_PASSWORD")
@@ -47,6 +49,7 @@ def verify_token(token, username, secret_key):
 
 # Funzione per registrare un utente
 def signup(username, password, image_url):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -67,16 +70,20 @@ def signup(username, password, image_url):
         conn.commit()
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_signup", http_status=200).inc()
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_signup", http_status=500).inc()
         raise BadRequest(f'Error while adding signup: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_signup").observe(time.time() - start_time)
 
 
 # Funzione per effettuare il login
 def login(username, password):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -97,16 +104,19 @@ def login(username, password):
 
         cursor.close()
         conn.close()
-
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_login", http_status=200).inc()
         return user
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_login", http_status=500).inc()
         raise BadRequest(f'Error while logging user: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_login").observe(time.time() - start_time)
 
 def get_user(username):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -119,16 +129,19 @@ def get_user(username):
 
         if not user:
             raise BadRequest('User not found')
-
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_user", http_status=200).inc()
         return {'username': user[0], 'image_url': user[1]}
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_user", http_status=500).inc()
         raise BadRequest(f'Error while getting user: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_get_user").observe(time.time() - start_time)
 
 def add_game(title, stock, price):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -149,14 +162,18 @@ def add_game(title, stock, price):
         conn.close()
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_game", http_status=500).inc()
         raise BadRequest(f'Error while adding game: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_game", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_add_game").observe(time.time() - start_time)
         return True
 
 
 def update_game(title, new_title=None, stock=None, price=None):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -198,15 +215,19 @@ def update_game(title, new_title=None, stock=None, price=None):
 
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_update_game", http_status=500).inc()
         raise BadRequest(f'Errore durante l\'aggiornamento del gioco: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_update_game", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_update_game").observe(time.time() - start_time)
         return True
 
 
 
 def delete_game(title):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -226,13 +247,17 @@ def delete_game(title):
 
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_delete_game", http_status=500).inc()
         raise BadRequest(f'Errore durante l\'eliminazione del gioco: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_delete_game", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_delete_game").observe(time.time() - start_time)
 
 
 def get_reservations(username):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -268,12 +293,16 @@ def get_reservations(username):
         return reservation_list
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_reservations", http_status=500).inc()
         raise BadRequest(f'Error while getting reservation: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_reservations", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_get_reservations").observe(time.time() - start_time)
 
 def add_reservation(username, game_title, num_copies):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -305,28 +334,20 @@ def add_reservation(username, game_title, num_copies):
             INSERT INTO reservations (user_id, game_id, num_copies, price, reservation_date)
             VALUES (%s, %s, %s, %s, %s)
         ''', (user_id, game_id, num_copies, price, reservation_date))
-        """
-        cursor.execute('''
-                    UPDATE games
-                    SET num_copies = num_copies - %s
-                    WHERE id = %s
-                ''', (num_copies, game_id))
-
-        cursor.execute('SELECT num_copies FROM games WHERE id = %s', (game_id,))
-        remaining_copies = cursor.fetchone()[0]
-        conn.commit()
-        return remaining_copies
-        """
         conn.commit()
         return True
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_reservation", http_status=500).inc()
         raise BadRequest(f'Error while adding reservation: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_reservation", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_add_reservation").observe(time.time() - start_time)
 
 def delete_reservation(reservation_id):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -358,12 +379,16 @@ def delete_reservation(reservation_id):
         return True
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_delete_reservation", http_status=500).inc()
         raise BadRequest(f'Error while deleting reservation: {str(e)}')
     finally:
         cursor.close()
         conn.close()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_delete_reservation", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_delete_reservation").observe(time.time() - start_time)
 
 def add_purchase(username, game_title, num_copies):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -411,13 +436,16 @@ def add_purchase(username, game_title, num_copies):
         return {'purchase_id': purchase_id, 'total_price': total_price, 'remaining_copies': remaining_copies,'purchase_date': purchase_date}
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_purchase", http_status=500).inc()
         raise BadRequest(f'Error while adding purchase: {str(e)}')
     finally:
         cursor.close()
         conn.close()
-
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_add_purchase", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_add_purchase").observe(time.time() - start_time)
 
 def get_purchases(username):
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -458,13 +486,16 @@ def get_purchases(username):
         return purchase_list
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_purchases", http_status=500).inc()
         raise BadRequest(f'Error while getting purchases: {str(e)}')
     finally:
         cursor.close()
         conn.close()
-
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_purchases", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_get_purchases").observe(time.time() - start_time)
 
 def get_all_purchases():
+    start_time = time.time()
     conn = get_db_connection()
     cursor = conn.cursor()
 
@@ -507,8 +538,10 @@ def get_all_purchases():
         return purchase_list
     except Exception as e:
         conn.rollback()
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_all_purchases", http_status=500).inc()
         raise BadRequest(f"Error while retrieving purchases: {str(e)}")
     finally:
         cursor.close()
         conn.close()
-
+        DB_REQUEST_COUNT.labels(method="function_call", endpoint="postgres_get_all_purchases", http_status=200).inc()
+        DB_REQUEST_LATENCY.labels(endpoint="postgres_get_all_purchases").observe(time.time() - start_time)

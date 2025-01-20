@@ -9,6 +9,10 @@ from werkzeug.exceptions import BadRequest
 import threading
 from kafka_consumer import *
 from kafka_producer import *
+from prometheus_client import generate_latest
+from metrics import PROMETHEUS_REGISTRY, REQUEST_COUNT, REQUEST_LATENCY
+import time
+
 
 app = Flask(__name__)
 
@@ -23,6 +27,29 @@ MONGO_DB_NAME = os.getenv("MONGO_DB_NAME", "game-catalog")
 MONGO_USER = os.getenv("MONGO_USER", "")
 MONGO_PASSWORD = os.getenv("MONGO_PASSWORD", "")
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "")
+
+# Middleware per il monitoraggio delle metriche
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def record_metrics(response):
+    latency = time.time() - request.start_time
+    endpoint = request.path
+    status = response.status_code
+
+    # Aggiornamento delle metriche Prometheus
+    REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, http_status=status).inc()
+    REQUEST_LATENCY.labels(endpoint=endpoint).observe(latency)
+
+    return response
+
+# Endpoint per esporre le metriche
+@app.route('/metrics')
+def metrics():
+    return generate_latest(PROMETHEUS_REGISTRY), 200, {'Content-Type': 'text/plain; charset=utf-8'}
+
 
 # Connessione al database MongoDB
 client = MongoClient(

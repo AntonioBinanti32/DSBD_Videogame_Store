@@ -6,6 +6,9 @@ from werkzeug.exceptions import BadRequest
 import os
 import threading
 from db_redis import *
+from prometheus_client import generate_latest
+from metrics import PROMETHEUS_REGISTRY, REQUEST_COUNT, REQUEST_LATENCY
+import time
 
 JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY")
 REDIS_HOST = os.getenv("REDIS_HOST", "redis")
@@ -13,6 +16,28 @@ REDIS_PORT = os.getenv("REDIS_PORT", "6379")
 
 app = Flask(__name__)
 redis_client = redis.StrictRedis(host=REDIS_HOST, port=REDIS_PORT, decode_responses=True)
+
+# Middleware per il monitoraggio delle metriche
+@app.before_request
+def start_timer():
+    request.start_time = time.time()
+
+@app.after_request
+def record_metrics(response):
+    latency = time.time() - request.start_time
+    endpoint = request.path
+    status = response.status_code
+
+    # Aggiornamento delle metriche Prometheus
+    REQUEST_COUNT.labels(method=request.method, endpoint=endpoint, http_status=status).inc()
+    REQUEST_LATENCY.labels(endpoint=endpoint).observe(latency)
+
+    return response
+
+# Endpoint per esporre le metriche
+@app.route('/metrics')
+def metrics():
+    return generate_latest(PROMETHEUS_REGISTRY), 200, {'Content-Type': 'text/plain; charset=utf-8'}
 
 
 # Funzione per verificare il token JWT

@@ -3,3 +3,4 @@ pymongo
 flask-bcrypt
 flask-jwt-extended
 kafka-python
+prometheus-client

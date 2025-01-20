@@ -3,6 +3,8 @@ from kafka.errors import KafkaError
 import json
 import logging
 import os
+import time
+from metrics import MESSAGES_PROCESSED, REQUEST_LATENCY
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -23,15 +25,16 @@ class NotificationError(Exception):
 
 def notify_game_catalog_signup(username):
     try:
+        start_time = time.time()
         if not username or not isinstance(username, str):
             raise ValueError("Lo username deve essere una stringa non vuota.")
 
         message = {"username": username}
-
+        logger.info(f"\n\n\nMessaggio da inviare: {message}\n\n\n")
         future = producer.send('user-registrations', value=message)
 
         result = future.get(timeout=10)
-        print(f"Messaggio inviato con successo a Kafka: {result}")
+        logger.info(f"Messaggio inviato con successo a Kafka: {result}")
 
     except KafkaError as ke:
         raise NotificationError(f"Errore durante l'invio del messaggio a Kafka: {str(ke)}") from ke
@@ -41,9 +44,12 @@ def notify_game_catalog_signup(username):
 
     except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+    finally:
+        REQUEST_LATENCY.labels(endpoint="kafka_message_producer_order_service").observe(time.time() - start_time)
 
 def notify_game_catalog_game(game_title, remaining_copies):
     try:
+        start_time = time.time()
         if not game_title or not isinstance(game_title, str):
             raise ValueError("game_title deve essere una stringa non vuota.")
         if not remaining_copies or not isinstance(remaining_copies, int):
@@ -66,9 +72,12 @@ def notify_game_catalog_game(game_title, remaining_copies):
 
     except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+    finally:
+        REQUEST_LATENCY.labels(endpoint="kafka_message_producer_order_service").observe(time.time() - start_time)
 
 def notify_notification_service(users_list, message):
     try:
+        start_time = time.time()
         if not users_list or not isinstance(users_list, list):
             raise ValueError("user_list deve essere una lista non vuota.")
         if not message or not isinstance(message, str):
@@ -91,9 +100,12 @@ def notify_notification_service(users_list, message):
 
     except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+    finally:
+        REQUEST_LATENCY.labels(endpoint="kafka_message_producer_order_service").observe(time.time() - start_time)
 
 def notify_notification_service_admin(message):
     try:
+        start_time = time.time()
         if not message or not isinstance(message, str):
             raise ValueError("message deve essere una stringa non vuota.")
 
@@ -112,3 +124,5 @@ def notify_notification_service_admin(message):
 
     except Exception as e:
         raise NotificationError(f"Errore imprevisto durante la notifica a Kafka: {str(e)}") from e
+    finally:
+        REQUEST_LATENCY.labels(endpoint="kafka_message_producer_order_service").observe(time.time() - start_time)

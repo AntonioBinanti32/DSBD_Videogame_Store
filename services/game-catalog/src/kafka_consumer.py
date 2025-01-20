@@ -5,6 +5,8 @@ import json
 from mongo_db import MongoDB
 import threading
 import logging
+import time
+from metrics import MESSAGES_PROCESSED, REQUEST_LATENCY
 
 logger = logging.getLogger()
 logger.setLevel(logging.INFO)
@@ -34,7 +36,10 @@ def listen_order_service():
     while True:
         try:
             for message in consumer:
+                start_time = time.time()
                 try:
+                    # Incrementa il contatore per ogni messaggio ricevuto
+                    MESSAGES_PROCESSED.labels(topic=message.topic).inc()
                     # Verifica del messaggio ricevuto
                     if not message or not message.value:
                         raise InvalidMessageError("Messaggio vuoto ricevuto.")
@@ -59,26 +64,27 @@ def listen_order_service():
         except KafkaConsumerError as kce:
             # Gestione degli errori generali del consumatore Kafka
             print(f"Errore Kafka Consumer: {str(kce)}. Tentativo di ripresa...")
-            import time
             time.sleep(5)
         except Exception as e:
             # Gestione di eventuali altre eccezioni
             print(f"Errore imprevisto nel ciclo Kafka Consumer: {str(e)}")
             raise
+        finally:
+            REQUEST_LATENCY.labels(endpoint="kafka_message_consumer_game_catalog").observe(time.time() - start_time)
 
 def handle_user_registration(message, db):
     # Estrazione del contenuto
     username = message.value.get('username')
     if not username:
         raise InvalidMessageError("Messaggio senza username.")
-
+    logger.info("\n\n\nInizio inserimento utente in mongoDB\n\n\n")
     # Verifica se l'utente esiste nel database
     if db.user_collection.find_one({"username": username}):
         raise KafkaConsumerError(f"L'utente {username} esiste già nel database.")
     else:
         # Inserimento nel database
         db.user_collection.insert_one({"username": username, "reviews": []})
-        print(f"Utente {username} registrato con successo nel database.")
+        logger.info(f"Utente {username} registrato con successo nel database.")
 
 def handle_game_modify(message, db):
     game_title = message.value.get('game_title')
