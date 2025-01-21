@@ -92,3 +92,21 @@ Le metriche per il monitoring **white-box** inserite sono:
   - `db_requests_total`
   - `db_request_duration_seconds`
   - `kafka_messages_processed_total`
+
+## Monitoring black-box
+Il monitoring **black-box** è stato realizzato tramite **Cadvisor**, per accedervi utilizzare **Grafana** come illustrato nella sezione precedente.
+Tra le metriche inserite da **Cadvisor vi sono:
+  - `container_cpu_usage_seconds_total`
+  - `container_memory_usage_bytes`
+  - `container_fs_reads_bytes_total` 
+  - `container_fs_writes_bytes_total`
+  - `container_network_receive_bytes_total`
+  - `container_network_transmit_bytes_total`
+  - `container_blkio_sync_total`
+  - `container_blkio_async_total`
+  - `container_blkio_sectors_total`
+  - `container_start_time_seconds`
+  - `container_fs_usage_bytes`
+  - `container_cpu_load_average_1m`
+  - `container_fs_limit_bytes`
+  - `container_last_event_timestamp`

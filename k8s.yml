@@ -1177,7 +1177,7 @@ apiVersion: v1
 kind: ConfigMap
 metadata:
   name: prometheus-config
-  #namespace: monitoring
+  namespace: default
 data:
   prometheus.yml: |
     global:
@@ -1199,13 +1199,27 @@ data:
       - job_name: "notification-service"
         static_configs:
           - targets: ["notification-service:3003"]
+      - job_name: "cadvisor"
+        kubernetes_sd_configs:
+          - role: service
+            namespaces:
+              names: ['default']
+        relabel_configs:
+          - source_labels: [__meta_kubernetes_service_name]
+            target_label: job
+          - source_labels: [__meta_kubernetes_pod_name]
+            target_label: pod_name
+        metrics_path: /metrics
+        scheme: http
+        static_configs:
+          - targets: ['cadvisor:8080']
 
 ---
 apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: prometheus
-  #namespace: monitoring
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -1235,7 +1249,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: prometheus
-  #namespace: monitoring
+  namespace: default
 spec:
   ports:
   - port: 9090
@@ -1250,7 +1264,7 @@ apiVersion: apps/v1
 kind: Deployment
 metadata:
   name: grafana
-  #namespace: monitoring
+  namespace: default
 spec:
   replicas: 1
   selector:
@@ -1283,7 +1297,7 @@ apiVersion: v1
 kind: Service
 metadata:
   name: grafana
-  #namespace: monitoring
+  namespace: default
 spec:
   ports:
   - port: 3000
@@ -1291,12 +1305,6 @@ spec:
   selector:
     app: grafana
   type: ClusterIP
-
----
-#apiVersion: v1
-#kind: Namespace
-#metadata:
-#  name: monitoring
 
 ---
 apiVersion: networking.k8s.io/v1
@@ -1320,3 +1328,46 @@ spec:
             name: grafana
             port:
               number: 3000
+
+---
+# Cadvisor
+apiVersion: apps/v1
+kind: DaemonSet
+metadata:
+  name: cadvisor
+  namespace: default
+spec:
+  selector:
+    matchLabels:
+      app: cadvisor
+  template:
+    metadata:
+      labels:
+        app: cadvisor
+    spec:
+      containers:
+      - name: cadvisor
+        image: google/cadvisor:latest
+        ports:
+        - containerPort: 8080
+        volumeMounts:
+        - name: docker-socket
+          mountPath: /var/run/docker.sock
+      volumes:
+      - name: docker-socket
+        hostPath:
+          path: /var/run/docker.sock
+          type: Socket
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: cadvisor
+  namespace: default
+spec:
+  ports:
+    - port: 8080
+      targetPort: 8080
+  selector:
+    app: cadvisor

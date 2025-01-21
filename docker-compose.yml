@@ -212,7 +212,7 @@ services:
       timeout: 5s
 
   # Monitoring
-  prometheus: #TODO: Da rivedere
+  prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
@@ -222,7 +222,7 @@ services:
     networks:
       - backend-network
 
-  grafana: #TODO: Da rivedere
+  grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
@@ -236,6 +236,18 @@ services:
       - ./monitoring/grafana:/var/lib/grafana
     networks:
       - backend-network
+
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - backend-network
+    restart: always
+
 
 volumes:
   mongo-data:
