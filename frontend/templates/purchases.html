@@ -1,0 +1,26 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="purchases-container">
+    <h1>All Purchases</h1>
+    {% if purchases %}
+        <ul class="purchase-items-list">
+            {% for item in purchases %}
+                <li class="purchase-item">
+                    <div class="purchase-item-info">
+                        <strong>Purchase date:</strong> {{ item.purchase_date | dateformat }}<br>
+                        <strong>Username:</strong> {{ item.username }}<br>
+                        <strong>Game:</strong> <a href="{{ url_for('game', gameTitle=item.game_title) }}">{{ item.game_title }}</a><br>
+                        <strong>Quantity:</strong> {{ item.num_copies }}<br>
+                        <strong>Price per copy:</strong> ${{ item.price }}<br>
+                        <strong>Total:</strong> ${{ item.num_copies * item.price }}
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+        <h3 class="total-revenue">Total Revenue: ${{ total_revenue }}</h3>
+    {% else %}
+        <p class="no-purchases">No purchases found.</p>
+    {% endif %}
+</div>
+{% endblock %}

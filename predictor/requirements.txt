@@ -1,0 +1,6 @@
+flask
+pandas
+numpy
+statsmodels
+requests
+prometheus-client

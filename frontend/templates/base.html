@@ -1,0 +1,89 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Game Store</title>
+    <link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="{{ url_for('static', filename='css/style.css') }}">
+    <script src="https://code.jquery.com/jquery-3.6.0.min.js"></script>
+    <script>
+        $(document).ready(function() {
+            {% if unread_notifications %}
+                let notifications = {{ unread_notifications | tojson }};
+                notifications.forEach(function(notification) {
+                    alert("New Notification: " + notification.message);
+                });
+            {% endif %}
+        });
+    </script>
+</head>
+<body>
+    <header>
+        <div class="logo-wrapper">
+            <img src="https://neon-factory.com/cdn/shop/products/video-game-pacman-512_aab66925-0907-4ffb-82ab-1b0dbcfaf5c0_1024x1024@2x.png?v=1587306041" alt="Left Logo">
+            <div class="logo">
+                <a href="{{ url_for('home') }}">Game Store</a>
+            </div>
+            <img src="https://theneonsign.co/cdn/shop/products/ghosteg_700x700.png?v=1658858573" alt="Right Logo">
+        </div>
+    </header>
+    {% block nav %}
+    <nav>
+        <ul>
+            <li><a href="{{ url_for('home') }}">Home</a></li>
+            {% if admin %}
+                <li><a href="{{ url_for('create_game') }}">Add new game</a></li>
+            {% endif %}
+        </ul>
+        <div class="user-cart">
+            <a href="{{ url_for('cart') }}" class="cart-link">
+                <img src="https://cdn-icons-png.flaticon.com/512/7595/7595338.png" alt="Cart" class="cart-icon">
+                <span>Cart</span>
+            </a>
+            {% if 'user' in session %}
+                <div class="user-menu">
+                    <img src="{{ session.get('user_image') }}" alt="User" class="user-icon">
+                    {% if unread_notifications %}
+                        <span class="notification-count">{{ unread_notifications|length }}</span>
+                    {% endif %}
+                    {% if admin %}
+                        <a>ADMIN MODE</a>
+                    {% else %}
+                        <a> {{ session.user }} </a>
+                    {% endif %}
+                    <div class="user-dropdown">
+                        <a href="{{ url_for('checkout', gameTitle='defaultGameTitle') }}">My Purchases</a>
+                        <a href="{{ url_for('notifications', username=session.user) }}">
+                            Notifications
+                            {% if unread_notifications %}
+                                <span class="notification-count">{{ unread_notifications|length }}</span>
+                            {% endif %}
+                        </a>
+                        {% if admin %}
+                            <a href="{{ url_for('purchases') }}">All purchases</a>
+                        {% endif %}
+                        <a href="{{ url_for('logout') }}">Logout</a>
+                    </div>
+                </div>
+            {% else %}
+                <a href="{{ url_for('login') }}" class="user-link">Login</a>
+                <a href="{{ url_for('signup') }}" class="user-link">Sign Up</a>
+            {% endif %}
+        </div>
+    </nav>
+    {% endblock %}
+    <div class="container">
+        {% with messages = get_flashed_messages() %}
+          {% if messages %}
+            <ul>
+              {% for message in messages %}
+                <li>{{ message }}</li>
+              {% endfor %}
+            </ul>
+          {% endif %}
+        {% endwith %}
+        {% block content %}{% endblock %}
+    </div>
+</body>
+</html>

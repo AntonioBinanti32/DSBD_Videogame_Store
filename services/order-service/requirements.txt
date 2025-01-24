@@ -1,1 +1,7 @@
-#TODO
+flask
+sqlalchemy==2.0.21
+psycopg2-binary
+flask-jwt-extended
+bcrypt
+kafka-python
+prometheus-client

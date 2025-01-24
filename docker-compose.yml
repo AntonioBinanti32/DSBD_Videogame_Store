@@ -1,6 +1,28 @@
 version: '3.9'
 services:
-  zookeeper: #TODO: Da rivedere
+  # Logica di API Gateway
+  nginx:
+    #image: nginxinc/nginx-unprivileged:stable
+    build:
+      context: ./nginx
+      dockerfile: Dockerfile
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./nginx/nginx.conf:/etc/nginx/nginx.conf
+      - ./nginx/.htpasswd:/etc/nginx/.htpasswd
+    depends_on:
+      - game-catalog
+      - order-service
+      - notification-service
+      - frontend
+    networks:
+      - frontend-network
+      - backend-network
+    restart: always
+
+  zookeeper:
     image: confluentinc/cp-zookeeper:7.3.0
     container_name: zookeeper
     ports:
@@ -8,78 +30,154 @@ services:
     environment:
       ZOOKEEPER_CLIENT_PORT: 2181
       ZOOKEEPER_TICK_TIME: 2000
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD", "zkServer.sh", "status" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
 
-  kafka: #TODO: Da rivedere
+  kafka:
     image: confluentinc/cp-kafka:7.3.0
-    container_name: kafka
+    container_name: my-kafka
     ports:
       - "9092:9092"
     environment:
       KAFKA_BROKER_ID: 1
       KAFKA_ZOOKEEPER_CONNECT: zookeeper:2181
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: PLAINTEXT:PLAINTEXT
-      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://kafka:9092
+      KAFKA_ADVERTISED_LISTENERS: PLAINTEXT://my-kafka:9092
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
+      KAFKA_LISTENERS: PLAINTEXT://0.0.0.0:9092
+      KAFKA_MAX_MESSAGE_SIZE: 209715200  # 200MB
+      KAFKA_MESSAGE_MAX_BYTES: 209715200  # 200MB
+
     depends_on:
       - zookeeper
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD", "kafka-broker-api-versions", "--bootstrap-server", "kafka:9092" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+
+  # Frontend client
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: frontend
+    image: frontend:1.0
+    ports:
+      - "3004:3000"
+    environment:
+      BACKEND_URL: http://nginx
+    volumes:
+      - ./frontend:/usr/src/app
+    networks:
+      - frontend-network
+    restart: always
 
   # Services
-  game-catalog: #TODO: Da rivedere
+  game-catalog:
     build:
       context: ./services/game-catalog
       dockerfile: Dockerfile
+    image: game-catalog:1.0
     ports:
       - "3001:3000"
     environment:
       MONGO_URI: mongodb://mongo:27017/game-catalog
+      MONGO_HOST: mongo
+      MONGO_PORT: 27017
+      MONGO_DB_NAME: game-catalog
+      MONGO_USER:
+      MONGO_PASSWORD:
+      JWT_SECRET_KEY: your_secret_key
+      KAFKA_URI: my-kafka:9092
     restart: always
     depends_on:
       - mongo
       - kafka
     volumes:
-      - ./services/game-catalog/src:/usr/src/app
+      - ./services/game-catalog:/usr/src/app
+    networks:
+      - backend-network
 
-  order-service: #TODO: Da rivedere
+  order-service:
     build:
       context: ./services/order-service
       dockerfile: Dockerfile
+    image: order-service:1.0
     ports:
       - "3002:3000"
     environment:
       POSTGRES_URI: postgres://postgres:password@postgres:5432/orders
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: password
+      POSTGRES_DB: orders
+      POSTGRES_HOST: postgres
+      JWT_SECRET_KEY: your_secret_key
+      KAFKA_URI: my-kafka:9092
     restart: always
     depends_on:
       - postgres
       - kafka
     volumes:
-      - ./services/order-service/src:/usr/src/app
+      - ./services/order-service:/usr/src/app
+    networks:
+      - backend-network
 
-  notification-service: #TODO: Da rivedere
+  notification-service:
     build:
       context: ./services/notification-service
       dockerfile: Dockerfile
+    image: notification-service:1.0
     ports:
       - "3003:3000"
     environment:
       REDIS_URI: redis://redis:6379
+      REDIS_HOST: redis
+      REDIS_PORT: 6379
+      NOTIFICATIONS_KEY: notifications
+      READ_STATUS_KEY_PREFIX: 'notification_reads:'
+      JWT_SECRET_KEY: your_secret_key
+      KAFKA_URI: my-kafka:9092
     restart: always
     depends_on:
       - redis
       - kafka
     volumes:
-      - ./services/order-service/src:/usr/src/app
+      - ./services/notification-service:/usr/src/app
+    networks:
+      - backend-network
 
   # Databases
-  mongo: #TODO: Da rivedere
+  mongo:
     image: mongo:6
     container_name: mongo
     ports:
       - "27017:27017"
     volumes:
-      - ./databases/mongo:/data/db
+      #- ./databases/mongo:/data/db
+      - mongo-data:/data/db
       - ./databases/mongo/configdb:/data/configdb
+      - ./databases/mongo/init.js:/docker-entrypoint-initdb.d/init.js
 
-  postgres: #TODO: Da rivedere
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD", "mongo", "--eval", "db.adminCommand('ping')" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
+
+  postgres:
     image: postgres:15
     container_name: postgres
     ports:
@@ -89,29 +187,98 @@ services:
       POSTGRES_PASSWORD: password
       POSTGRES_DB: orders
     volumes:
-      - ./databases/postgres:/var/lib/postgresql/data
+      #- ./databases/postgres:/var/lib/postgresql/data
+      - postgres-data:/var/lib/postgresql/data
+      - ./databases/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d orders" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
 
-  redis: #TODO: Da rivedere
+  redis:
     image: redis:7
     container_name: redis
     ports:
       - "6379:6379"
+    networks:
+      - backend-network
+    healthcheck:
+      test: [ "CMD", "redis-cli", "ping" ]
+      interval: 10s
+      retries: 5
+      start_period: 30s
+      timeout: 5s
 
   # Monitoring
-  prometheus: #TODO: Da rivedere
+  prometheus:
     image: prom/prometheus:latest
     container_name: prometheus
     ports:
       - "9090:9090"
     volumes:
       - ./monitoring/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
+    networks:
+      - backend-network
 
-  grafana: #TODO: Da rivedere
+  grafana:
     image: grafana/grafana:latest
     container_name: grafana
     ports:
-      - "3000:3000"
+      - "3005:3000"
+    environment:
+      - GF_SECURITY_ADMIN_USER=admin
+      - GF_SECURITY_ADMIN_PASSWORD=admin
     depends_on:
       - prometheus
     volumes:
       - ./monitoring/grafana:/var/lib/grafana
+    networks:
+      - backend-network
+
+  cadvisor:
+    image: google/cadvisor:latest
+    container_name: cadvisor
+    ports:
+      - "8081:8080"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock
+    networks:
+      - backend-network
+    restart: always
+
+  # Predictor
+  predictor:
+    build:
+      context: ./predictor
+      dockerfile: Dockerfile
+    image: predictor:1.0
+    ports:
+      - "3006:3000"
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090/api/v1/query
+      PREDICTOR_COUNTER_LIMIT: 2
+    restart: always
+    depends_on:
+      - prometheus
+      - grafana
+      - cadvisor
+    volumes:
+      - ./predictor:/usr/src/app
+    networks:
+      - backend-network
+
+
+volumes:
+  mongo-data:
+  postgres-data:
+  redis-data:
+
+networks:
+  frontend-network:
+    driver: bridge
+  backend-network:
+    driver: bridge

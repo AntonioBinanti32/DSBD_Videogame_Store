@@ -1,0 +1,25 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div class="checkout-container">
+    <h1>Checkout</h1>
+    {% if purchases %}
+        <h2>Your Purchases</h2>
+        <ul class="purchase-items-list">
+            {% for item in purchases %}
+                <li class="purchase-item">
+                    <div class="purchase-item-info">
+                        <strong>Purchase date:</strong> {{ item.purchase_date | dateformat }}<br>
+                        <strong>Game:</strong> <a href="{{ url_for('game', gameTitle=item.game_title) }}">{{ item.game_title }}</a><br>
+                        <strong>Quantity:</strong> {{ item.num_copies }}<br>
+                        <strong>Price per copy:</strong> ${{ item.price }}<br>
+                        <strong>Total:</strong> ${{ item.num_copies * item.price }}
+                    </div>
+                </li>
+            {% endfor %}
+        </ul>
+    {% else %}
+        <p class="no-purchases">You have not made any purchases yet.</p>
+    {% endif %}
+</div>
+{% endblock %}
