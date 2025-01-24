@@ -74,6 +74,8 @@ services:
     image: frontend:1.0
     ports:
       - "3004:3000"
+    environment:
+      BACKEND_URL: http://nginx
     volumes:
       - ./frontend:/usr/src/app
     networks:
@@ -247,6 +249,27 @@ services:
     networks:
       - backend-network
     restart: always
+
+  # Predictor
+  predictor:
+    build:
+      context: ./predictor
+      dockerfile: Dockerfile
+    image: predictor:1.0
+    ports:
+      - "3006:3000"
+    environment:
+      PROMETHEUS_URL: http://prometheus:9090/api/v1/query
+      PREDICTOR_COUNTER_LIMIT: 2
+    restart: always
+    depends_on:
+      - prometheus
+      - grafana
+      - cadvisor
+    volumes:
+      - ./predictor:/usr/src/app
+    networks:
+      - backend-network
 
 
 volumes:

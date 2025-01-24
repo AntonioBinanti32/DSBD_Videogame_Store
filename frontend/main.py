@@ -1,3 +1,5 @@
+import os
+
 from flask import Flask, render_template, request, redirect, url_for, session, flash, jsonify
 import requests
 import configparser
@@ -16,7 +18,7 @@ app.secret_key = 'your_secret_key'
 config = configparser.ConfigParser()
 config.read('config.ini')
 
-backend_url = config.get('backend', 'nginx_url')
+backend_url = os.getenv("BACKEND_URL")
 
 def is_user_logged_in():
     return 'user' in session

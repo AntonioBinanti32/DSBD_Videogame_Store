@@ -21,13 +21,12 @@ desiderati e procedere con l'acquisto.
 
 ### Installazione con Docker Compose
 
-1. Decommentare solo il **1° URL** nel file `frontend/config.ini` ed eliminare un eventuale immagine creata precedentemente.
-2. Via terminale spostarsi nella cartella dove si trova il file `docker-compose.yml` ed seguire il comando:
+1. Via terminale spostarsi nella cartella dove si trova il file `docker-compose.yml` ed seguire il comando:
    ```bash
    docker-compose up --build
    ```
-3. Attendere circa 1-2 minuti affinché tutti i servizi siano avviati.
-4. Accedere all'applicazione dal browser all'indirizzo: [http://localhost:3004/](http://localhost:3004/)
+2. Attendere circa 1-2 minuti affinché tutti i servizi siano avviati.
+3. Accedere all'applicazione dal browser all'indirizzo: [http://localhost:3004/](http://localhost:3004/)
 
 ### Installazione con Kubernetes
 
@@ -40,24 +39,24 @@ desiderati e procedere con l'acquisto.
     127.0.0.1 store.com
     127.0.0.1 store-grafana.com
    ```
-3. Decommentare solo il **2° URL** nel `file frontend/config.ini` ed eliminare un eventuale immagine creata precedentemente.
-4. Creare le immagini Docker per ogni servizio:
+3. Creare le immagini Docker per ogni servizio:
    - Posizionarsi nelle directory contenenti i file `Dockerfile` dei seguenti servizi:
      - `frontend`
      - `game-catalog`
      - `order-service`
      - `notification-service`
+     - `predictor`
    - Eseguire il comando:
      ```bash
      docker build -t <nome_servizio>:1.0 .
      ```
-5. Avviare l'applicazione eseguendo:
+4. Avviare l'applicazione eseguendo:
     ```bash
     kubectl apply -f k8s.yml
     ```
-6. Attendere l'avvio dei servizi. In caso di malfunzionamento delle notifiche, riavviare il pod del servizio `notification-service`.
+5. Attendere l'avvio dei servizi. In caso di malfunzionamento delle notifiche, riavviare il pod del servizio `notification-service`.
 
-7. Accedere all'applicazione dal browser all'indirizzo: [http://store.com/login](http://store.com/login)
+6. Accedere all'applicazione dal browser all'indirizzo: [http://store.com/login](http://store.com/login)
 
 ## Accesso in Modalità Admin
 Per accedere alla modalità amministratore, utilizzare le seguenti credenziali:
@@ -95,7 +94,7 @@ Le metriche per il monitoring **white-box** inserite sono:
 
 ## Monitoring black-box
 Il monitoring **black-box** è stato realizzato tramite **Cadvisor**, per accedervi utilizzare **Grafana** come illustrato nella sezione precedente.
-Tra le metriche inserite da **Cadvisor vi sono:
+Tra le metriche inserite da **Cadvisor** vi sono:
   - `container_cpu_usage_seconds_total`
   - `container_memory_usage_bytes`
   - `container_fs_reads_bytes_total` 
@@ -110,3 +109,10 @@ Tra le metriche inserite da **Cadvisor vi sono:
   - `container_cpu_load_average_1m`
   - `container_fs_limit_bytes`
   - `container_last_event_timestamp`
+
+## Predittore
+Il servizio di predizione è stato realizzato tramite un modello **ARIMA**, i risultati predetti sono accessibili da **Grafana** alle seguenti metriche:
+  - `predicted_cpu_usage`: Per le predizioni sull'utilizzo della CPU
+  - `predicted_http_requests`: 
+    - Per le predizioni sulle richieste fatte per servizio, dalla dashboard di **Grafana** selezionare come _Label filters_ `exported_job` in modo da poter visualizzare le previsioni sui singoli servizi.
+    - Si consiglia di impostare la visualizzazione dei dati in `Bar gauge` nella sezione _Visualizations_ in alto a destra nella dashboard.

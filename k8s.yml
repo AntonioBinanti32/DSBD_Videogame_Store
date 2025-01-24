@@ -293,14 +293,9 @@ spec:
           image: frontend:1.0
           ports:
             - containerPort: 3000
-          volumeMounts:
-            - name: custom-hosts-volume
-              mountPath: /etc/hosts
-              subPath: hosts  # Monta il file hosts del ConfigMap in /etc/hosts
-      volumes:
-        - name: custom-hosts-volume
-          configMap:
-            name: custom-hosts  # ConfigMap che contiene il file hosts
+          env:
+            - name: BACKEND_URL
+              value: "http://nginx-reverse-proxy.default.svc.cluster.local"
 
 ---
 apiVersion: v1
@@ -314,16 +309,6 @@ spec:
     targetPort: 3000
   selector:
     app: frontend
-
----
-apiVersion: v1 #Per inserire dominio in frontend
-kind: ConfigMap
-metadata:
-  name: custom-hosts
-  namespace: default
-data:
-  hosts: |
-    127.0.0.1 reverse-proxy-ingress.com
 
 ---
 # Zookeeper
@@ -1199,6 +1184,9 @@ data:
       - job_name: "notification-service"
         static_configs:
           - targets: ["notification-service:3003"]
+      - job_name: "predictor"
+        static_configs:
+          - targets: ["predictor:3006"] 
       - job_name: "cadvisor"
         kubernetes_sd_configs:
           - role: service
@@ -1371,3 +1359,46 @@ spec:
       targetPort: 8080
   selector:
     app: cadvisor
+
+---
+# Predictor
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: predictor
+  namespace: default
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: predictor
+  template:
+    metadata:
+      labels:
+        app: predictor
+    spec:
+      containers:
+      - name: predictor
+        image: predictor:1.0
+        ports:
+        - containerPort: 3000
+        env:
+        - name: PROMETHEUS_URL
+          value: "http://prometheus.default.svc.cluster.local:9090/api/v1/query"
+        - name: PREDICTOR_COUNTER_LIMIT
+          value: "2"
+
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: predictor
+  namespace: default
+spec:
+  ports:
+    - port: 3006
+      targetPort: 3000
+  selector:
+    app: predictor
+  type: ClusterIP
+
